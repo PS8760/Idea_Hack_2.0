@@ -11,7 +11,15 @@ async def connect_db():
     global client, db
     mongo_url = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
     db_name = os.getenv("DB_NAME", "smart-resolve")
-    # serverSelectionTimeoutMS prevents hanging forever if MongoDB is unreachable
+
+    # If separate user/pass env vars are provided, build the URL safely
+    mongo_user = os.getenv("MONGO_USER")
+    mongo_pass = os.getenv("MONGO_PASS")
+    mongo_host = os.getenv("MONGO_HOST")
+    if mongo_user and mongo_pass and mongo_host:
+        from urllib.parse import quote_plus
+        mongo_url = f"mongodb+srv://{quote_plus(mongo_user)}:{quote_plus(mongo_pass)}@{mongo_host}/{db_name}?retryWrites=true&w=majority"
+
     client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
     db = client[db_name]
     try:
