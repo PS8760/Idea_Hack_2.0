@@ -7,7 +7,5 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-dotenv==1.0.1
 groq==1.0.0
-sentence-transformers==2.7.0
-numpy==1.26.4
 python-multipart==0.0.9
 aiosmtplib==3.0.1
