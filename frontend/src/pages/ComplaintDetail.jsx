@@ -405,6 +405,11 @@ export default function ComplaintDetail() {
           <span className="badge border border-slate-700/50 text-slate-400 bg-slate-800/50 flex items-center gap-1">
             <ChannelIcon size={11} /> {channel}
           </span>
+          {complaint.contact_number && (
+            <span className="badge border border-slate-700/50 text-slate-400 bg-slate-800/50 flex items-center gap-1">
+              {channel === 'whatsapp' ? <MessageSquare size={11} /> : <Phone size={11} />} {complaint.contact_number}
+            </span>
+          )}
           {assigned_agent && (
             <span className="badge border border-violet-500/20 text-violet-400 bg-violet-400/10 flex items-center gap-1">
               <User size={11} /> {assigned_agent}

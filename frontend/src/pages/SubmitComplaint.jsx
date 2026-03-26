@@ -86,6 +86,16 @@ const PRIORITY_CONFIG = {
   low:    { color: 'text-emerald-400', bg: 'bg-emerald-400/10', bar: 'bg-emerald-400', label: 'Low',    score: 20 },
 }
 
+const COUNTRY_CODES = [
+  { code: '+91', label: '🇮🇳 India (+91)' },
+  { code: '+1',  label: '🇺🇸 USA (+1)' },
+  { code: '+44', label: '🇬🇧 UK (+44)' },
+  { code: '+971',label: '🇦🇪 UAE (+971)' },
+  { code: '+61', label: '🇦🇺 Australia (+61)' },
+  { code: '+65', label: '🇸🇬 Singapore (+65)' },
+  { code: '+49', label: '🇩🇪 Germany (+49)' },
+]
+
 function SeverityMeter({ score }) {
   const pct = Math.min(100, Math.max(0, (score / 10) * 100))
   const color = score >= 8 ? 'bg-red-500' : score >= 5 ? 'bg-yellow-500' : 'bg-emerald-500'
@@ -283,7 +293,7 @@ function AIPanel({ analysis, analyzing, charCount }) {
 export default function SubmitComplaint() {
   const navigate = useNavigate()
   const { addNotification } = useNotifications()
-  const [form, setForm] = useState({ title: '', description: '', channel: 'web' })
+  const [form, setForm] = useState({ title: '', description: '', channel: 'web', contact_number: '', countryCode: '+91' })
   const [loading, setLoading] = useState(false)
   const [analysis, setAnalysis] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -323,10 +333,16 @@ export default function SubmitComplaint() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    const fullContactNumber = (form.channel === 'whatsapp' || form.channel === 'phone')
+      ? `${form.countryCode}${form.contact_number.replace(/\D/g, '')}`
+      : ''
+
     setLoading(true)
     try {
-      const { data } = await api.post('/complaints', form)
+      const { data } = await api.post('/complaints', { ...form, contact_number: fullContactNumber })
       toast.success(data.assigned_agent ? `Assigned to ${data.assigned_agent}` : 'Complaint submitted')
+      
       if (data.assigned_agent) {
         addNotification({
           type: 'assignment',
@@ -335,6 +351,21 @@ export default function SubmitComplaint() {
           forRoles: ['agent', 'admin'],
         })
       }
+
+      // ── Channel-specific triggers ─────────────────────────────────────────
+      if (form.channel === 'whatsapp') {
+        const text = encodeURIComponent(
+          `*New Complaint: ${data.title}*\n\n` +
+          `*ID:* ${data._id}\n` +
+          `*Description:* ${form.description.substring(0, 100)}...\n\n` +
+          `*Status:* Being processed by ${data.assigned_agent || 'our team'}.`
+        )
+        const waUrl = `https://wa.me/${fullContactNumber.replace(/\D/g, '')}?text=${text}`
+        window.open(waUrl, '_blank')
+      } else if (form.channel === 'phone') {
+        window.location.href = `tel:${fullContactNumber}`
+      }
+
       navigate(`/app/complaints/${data._id}`)
     } catch (err) {
       const detail = err.response?.data?.detail
@@ -452,6 +483,54 @@ export default function SubmitComplaint() {
                 </button>
               ))}
             </div>
+            {/* Contact Number (WhatsApp/Phone only) */}
+            <AnimatePresence>
+              {(form.channel === 'whatsapp' || form.channel === 'phone') && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                  className="mt-4 overflow-hidden"
+                >
+                  <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                    Your {form.channel === 'whatsapp' ? 'WhatsApp' : 'Phone'} Number
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      value={form.countryCode}
+                      onChange={e => set('countryCode', e.target.value)}
+                      className="h-[42px] px-3 rounded-xl border text-xs outline-none transition-all"
+                      style={{ 
+                        width: '85px',
+                        borderColor: 'var(--border)', 
+                        background: 'var(--bg-elevated)',
+                        color: 'var(--text-primary)'
+                      }}
+                    >
+                      {COUNTRY_CODES.map(c => (
+                        <option key={c.code} value={c.code} style={{ background: 'var(--bg-surface)' }}>{c.code}</option>
+                      ))}
+                    </select>
+                    <div className="relative flex-1">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+                        {form.channel === 'whatsapp' ? <MessageSquare size={14} /> : <Phone size={14} />}
+                      </div>
+                      <input
+                        type="tel"
+                        required
+                        value={form.contact_number}
+                        onChange={e => set('contact_number', e.target.value)}
+                        placeholder="e.g. 98765 43210"
+                        className="input-field pl-10 w-full"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-faint)' }}>
+                    {form.channel === 'whatsapp' 
+                      ? "We'll send your complaint details to this number on WhatsApp."
+                      : "Our agents will call you on this number for resolution."}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
             {/* Available agents */}
             <AnimatePresence>
               {agents.length > 0 && (

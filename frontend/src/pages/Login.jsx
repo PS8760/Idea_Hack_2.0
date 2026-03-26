@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useGoogleLogin } from '@react-oauth/google'
 import toast from 'react-hot-toast'
-import { ShieldAlert, Eye, EyeOff, User, Headphones, Shield } from 'lucide-react'
+import { ShieldAlert, Eye, EyeOff, User, Headphones, Shield, Globe } from 'lucide-react'
 
 const ROLES = [
   {
@@ -33,10 +34,11 @@ const ROLES = [
 ]
 
 export default function Login() {
-  const { login } = useAuth()
+  const { login, loginWithGoogle, googleConfig } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '', role: 'user' })
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const [showPw, setShowPw] = useState(false)
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
@@ -54,6 +56,31 @@ export default function Login() {
       setLoading(false)
     }
   }
+
+  // Google OAuth login handler - always call hook, use conditionally
+  const handleGoogleLogin = useGoogleLogin({
+    onSuccess: async (codeResponse) => {
+      setGoogleLoading(true)
+      try {
+        const result = await loginWithGoogle(codeResponse.access_token, form.role)
+        if (result.success) {
+          toast.success(`Welcome, ${result.user.name}! Logged in with Google`)
+          navigate('/app')
+        } else {
+          toast.error(result.error || 'Google login failed')
+        }
+      } catch (err) {
+        toast.error('Google login error: ' + err.message)
+      } finally {
+        setGoogleLoading(false)
+      }
+    },
+    onError: () => {
+      setGoogleLoading(false)
+      toast.error('Google login failed. Please try again.')
+    },
+    flow: 'implicit',
+  })
 
   const selected = ROLES.find(r => r.value === form.role)
 
@@ -148,6 +175,43 @@ export default function Login() {
               }
             </button>
           </form>
+
+          {/* Google OAuth Button */}
+          {googleConfig?.google_oauth_enabled && (
+            <>
+              <div className="flex items-center gap-3 my-5">
+                <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Or continue with</span>
+                <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+              </div>
+
+              <motion.button
+                type="button"
+                disabled={googleLoading}
+                onClick={() => handleGoogleLogin()}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="w-full py-2.5 px-4 rounded-xl border transition-all flex items-center justify-center gap-2 font-medium text-sm"
+                style={{
+                  borderColor: 'var(--border)',
+                  background: 'var(--bg-elevated)',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                {googleLoading ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <Globe size={16} className="text-blue-500" />
+                    Continue with Google
+                  </>
+                )}
+              </motion.button>
+            </>
+          )}
 
           <p className="text-sm text-center mt-5" style={{ color: 'var(--text-muted)' }}>
             No account?{' '}

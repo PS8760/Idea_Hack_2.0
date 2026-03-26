@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { NotificationProvider } from './context/NotificationContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { Toaster } from 'react-hot-toast'
+import ErrorBoundary from './components/ErrorBoundary'
 
 // Public pages
 import Landing from './pages/Landing'
@@ -38,17 +39,18 @@ function RoleRoute({ children, roles }) {
 
 export default function App() {
   return (
-    <ThemeProvider>
-    <AuthProvider>
-      <NotificationProvider>
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            style: { background: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border)', fontSize: '0.875rem' },
-            success: { iconTheme: { primary: '#7c3aed', secondary: '#fff' } },
-          }}
-        />
-        <Routes>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <NotificationProvider>
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                style: { background: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border)', fontSize: '0.875rem' },
+                success: { iconTheme: { primary: '#7c3aed', secondary: '#fff' } },
+              }}
+            />
+            <Routes>
           {/* Public */}
           <Route path="/" element={<Landing />} />
           <Route path="/contact" element={<Contact />} />
@@ -75,9 +77,10 @@ export default function App() {
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </NotificationProvider>
-    </AuthProvider>
-    </ThemeProvider>
+            </Routes>
+          </NotificationProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   )
 }

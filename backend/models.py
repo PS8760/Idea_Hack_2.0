@@ -21,6 +21,7 @@ class ComplaintCreate(BaseModel):
     category: str = "Other"
     channel: str = "web"
     product: Optional[str] = None
+    contact_number: Optional[str] = None
 
 class ComplaintUpdate(BaseModel):
     status: Optional[str] = None

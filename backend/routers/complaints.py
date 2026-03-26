@@ -83,6 +83,7 @@ async def create_complaint(body: ComplaintCreate, user=Depends(get_current_user)
         "category": ai.get("category", body.category),
         "product": ai.get("product", body.product or "General"),
         "channel": body.channel,
+        "contact_number": body.contact_number,
         "sentiment": ai.get("sentiment", "neutral"),
         "priority": priority,
         "severity_score": ai.get("severity_score", 5),

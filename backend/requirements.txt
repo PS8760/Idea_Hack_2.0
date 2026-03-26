@@ -9,3 +9,9 @@ python-dotenv==1.0.1
 groq==1.0.0
 python-multipart==0.0.9
 aiosmtplib==3.0.1
+google-auth==2.25.2
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+requests==2.31.0
+pydantic-settings==2.1.0
+slowapi==0.1.9

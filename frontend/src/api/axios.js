@@ -12,4 +12,28 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Global response error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Handle network errors
+    if (!error.response) {
+      console.error('Network error:', error.message)
+      // Don't throw, let individual components handle it
+    }
+    
+    // 401: Unauthorized - clear token and redirect to login
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+    
+    return Promise.reject(error)
+  }
+)
+
 export default api
+
