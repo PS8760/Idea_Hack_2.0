@@ -39,19 +39,10 @@ export function AuthProvider({ children }) {
   const fetchGoogleConfig = async () => {
     try {
       const { data } = await api.get('/auth/config')
-      // Always enable for development, or use backend response
-      const config = {
-        ...data,
-        google_oauth_enabled: true  // Force enable for development
-      }
-      setGoogleConfig(config)
+      setGoogleConfig(data)
     } catch (err) {
       console.error('Failed to load Google OAuth config:', err)
-      // Enable button even if backend config fails (for development)
-      setGoogleConfig({
-        google_oauth_enabled: true,
-        google_client_id: 'development-mode'
-      })
+      setGoogleConfig({ google_oauth_enabled: false })
     }
   }
 

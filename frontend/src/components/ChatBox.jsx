@@ -188,9 +188,14 @@ export default function ChatBox({ complaintId, assignedAgent, channel = 'web', r
     if (lastMsg?.sender_role === 'agent') fetchQuickReplies()
   }, [current.length])
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages — scroll within chat container only
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (bottomRef.current) {
+      const container = bottomRef.current.closest('.overflow-y-auto')
+      if (container) {
+        container.scrollTop = container.scrollHeight
+      }
+    }
   }, [current, typers])
 
   // Typing indicator logic

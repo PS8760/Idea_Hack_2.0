@@ -5,6 +5,7 @@ from models import ComplaintCreate, ComplaintUpdate, AnalyzePreviewRequest
 from auth_utils import get_current_user
 from ai_service import analyze_complaint, suggest_reply
 from duplicate_detector import embed, find_duplicates, check_duplicate_for_user
+from complaint_classifier import classify, get_model_info
 from email_service import (
     send_escalation_email, send_complaint_confirmation,
     send_status_update, send_agent_reply, send_sla_warning
@@ -44,6 +45,19 @@ async def analyze_preview(body: AnalyzePreviewRequest, user=Depends(get_current_
     dups = await find_duplicates(db, body.text)
     result["is_duplicate"] = len(dups) > 0
     return result
+
+# ── Public demo analyze (no auth — for landing page) ────────────────────────
+@router.post("/demo/analyze")
+async def demo_analyze(body: AnalyzePreviewRequest):
+    """Public endpoint for landing page demo — no authentication required."""
+    if len(body.text.strip()) < 10:
+        raise HTTPException(status_code=400, detail="Text too short")
+    if len(body.text) > 2000:
+        raise HTTPException(status_code=400, detail="Text too long")
+    result = analyze_complaint(body.text)
+    # Don't run duplicate check for public demo
+    result["is_duplicate"] = False
+    return result
 # ── Submit complaint (user picks a channel → auto-assigns matching agent) ───
 @router.post("")
 async def create_complaint(body: ComplaintCreate, user=Depends(get_current_user)):
@@ -72,15 +86,108 @@ async def create_complaint(body: ComplaintCreate, user=Depends(get_current_user)
     priority = ai.get("priority", "medium")
     sla_deadline = datetime.utcnow() + timedelta(hours=SLA_HOURS.get(priority, 24))
 
-    # Find an active agent for the chosen channel
-    agent = await db.users.find_one({"role": "agent", "agent_channel": body.channel, "active": {"$ne": False}})
+    # ── ML-powered smart routing ────────────────────────────────────────────
+    full_text = f"{body.title} {body.description}".strip()
+    ml_result = classify(full_text)
+    ml_category     = ml_result["category"]
+    ml_specialization = ml_result["specialization"]
+    ml_confidence   = ml_result["confidence"]
+
+    # Use ML category if confidence > 50%, else fall back to LLM category
+    final_category = ml_category if ml_confidence > 0.5 else ai.get("category", body.category)
+
+    # For routing, combine ML + LLM — if both agree, high confidence
+    llm_category = ai.get("category", "Other")
+    from complaint_classifier import CATEGORY_TO_SPECIALIZATION
+    llm_specialization = CATEGORY_TO_SPECIALIZATION.get(llm_category, "General")
+
+    # Use ML specialization if confident, else use LLM specialization
+    routing_specialization = ml_specialization if ml_confidence > 0.5 else llm_specialization
+
+    print(f"[ROUTING] ML:{ml_category}({ml_confidence:.0%}) LLM:{llm_category} → routing as: {routing_specialization} on channel: {body.channel}")
+
+    # ── 6-tier routing priority ──────────────────────────────────────────────
+    # Tier 1: channel + specialization (perfect match)
+    # Tier 2: specialization only, non-General (right expert, any channel)
+    # Tier 3: channel + General specialization (right channel, generalist)
+    # Tier 4: channel only (right channel, any specialization)
+    # Tier 5: specialization only (right expert, any channel — last expert attempt)
+    # Tier 6: any active agent (absolute fallback)
+
+    agent = None
+    routing_method = "none"
+
+    # Tier 1: perfect match
+    if routing_specialization != "General":
+        agent = await db.users.find_one({
+            "role": "agent",
+            "agent_channel": body.channel,
+            "specialization": routing_specialization,
+            "active": {"$ne": False}
+        })
+        if agent: routing_method = "channel+specialization"
+
+    # Tier 2: specialist on any channel (specialization > channel)
+    if not agent and routing_specialization != "General":
+        agent = await db.users.find_one({
+            "role": "agent",
+            "specialization": routing_specialization,
+            "active": {"$ne": False}
+        })
+        if agent: routing_method = "specialization_only"
+
+    # Tier 3: General agent on correct channel
+    if not agent:
+        agent = await db.users.find_one({
+            "role": "agent",
+            "agent_channel": body.channel,
+            "specialization": "General",
+            "active": {"$ne": False}
+        })
+        if agent: routing_method = "channel+general"
+
+    # Tier 4: any agent on correct channel
+    if not agent:
+        agent = await db.users.find_one({
+            "role": "agent",
+            "agent_channel": body.channel,
+            "active": {"$ne": False}
+        })
+        if agent: routing_method = "channel_only"
+
+    # Tier 5: any specialist regardless of channel (try LLM category too)
+    if not agent and llm_specialization != "General" and llm_specialization != routing_specialization:
+        agent = await db.users.find_one({
+            "role": "agent",
+            "specialization": llm_specialization,
+            "active": {"$ne": False}
+        })
+        if agent: routing_method = "llm_specialization"
+
+    # Tier 6: absolute fallback — any active agent
+    if not agent:
+        agent = await db.users.find_one({
+            "role": "agent",
+            "active": {"$ne": False}
+        })
+        if agent: routing_method = "fallback"
+
     assigned_agent_id = str(agent["_id"]) if agent else None
-    assigned_agent = agent.get("name", "") if agent else ""
+    assigned_agent    = agent.get("name", "") if agent else ""
+
+    print(f"[ROUTING] → Assigned: '{assigned_agent}' via [{routing_method}]")
+
+    # Flag for escalation suggestion if routing wasn't ideal
+    needs_escalation_suggestion = (
+        routing_method in ("channel_only", "channel+general", "fallback", "llm_specialization")
+        and routing_specialization != "General"
+        and ml_confidence > 0.5
+    )
 
     doc = {
         "title": body.title or ai.get("title", body.description[:60]),
         "description": body.description,
-        "category": ai.get("category", body.category),
+        "category": final_category,
         "product": ai.get("product", body.product or "General"),
         "channel": body.channel,
         "contact_number": body.contact_number,
@@ -101,6 +208,12 @@ async def create_complaint(body: ComplaintCreate, user=Depends(get_current_user)
         "assigned_agent": assigned_agent,
         "escalation_history": [],
         "messages": [],
+        # ML routing metadata
+        "ml_category": ml_category,
+        "ml_specialization": ml_specialization,
+        "ml_confidence": ml_confidence,
+        "routing_method": routing_method,
+        "needs_escalation_suggestion": needs_escalation_suggestion,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }
@@ -177,6 +290,29 @@ async def get_insights(user=Depends(get_current_user)):
     avg_res = round(sum((d["updated_at"] - d["created_at"]).total_seconds() for d in resolved) / len(resolved) / 3600, 1) if resolved else None
     title_counts = Counter(d.get("title") for d in all_docs)
 
+    # ── Channel performance breakdown ──────────────────────────────────────
+    channels = ["web", "email", "whatsapp", "phone", "chat"]
+    channel_perf = {}
+    for ch in channels:
+        ch_docs = [d for d in all_docs if d.get("channel") == ch]
+        if not ch_docs:
+            continue
+        ch_resolved = [d for d in ch_docs if d.get("status") == "resolved" and d.get("updated_at") and d.get("created_at")]
+        ch_breaches = sum(1 for d in ch_docs if d.get("sla_deadline") and d["sla_deadline"] < now and d.get("status") != "resolved")
+        ch_avg_res = round(sum((d["updated_at"] - d["created_at"]).total_seconds() for d in ch_resolved) / len(ch_resolved) / 3600, 1) if ch_resolved else None
+        ch_sla_total = len([d for d in ch_docs if d.get("sla_deadline")])
+        ch_sla_met = ch_sla_total - ch_breaches
+        ch_sla_rate = round((ch_sla_met / ch_sla_total) * 100) if ch_sla_total > 0 else 100
+        channel_perf[ch] = {
+            "total": len(ch_docs),
+            "open": sum(1 for d in ch_docs if d.get("status") == "open"),
+            "in_progress": sum(1 for d in ch_docs if d.get("status") == "in-progress"),
+            "resolved": len(ch_resolved),
+            "sla_breaches": ch_breaches,
+            "sla_compliance": ch_sla_rate,
+            "avg_resolution_hours": ch_avg_res,
+        }
+
     return {
         "total": len(all_docs),
         "by_category": dict(Counter(d.get("category") for d in all_docs)),
@@ -187,7 +323,15 @@ async def get_insights(user=Depends(get_current_user)):
         "sla_breaches": breaches,
         "avg_resolution_time": avg_res,
         "top_issues": [{"title": t, "count": c} for t, c in title_counts.most_common(5) if c > 1],
+        "channel_performance": channel_perf,
     }
+
+# ── ML Model info (admin only) ───────────────────────────────────────────────
+@router.get("/model/info")
+async def model_info_endpoint(user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    return get_model_info()
 
 # ── Regulatory CSV export (admin only) ──────────────────────────────────────
 @router.get("/export/csv")
@@ -243,7 +387,187 @@ async def export_csv(user=Depends(get_current_user)):
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
-# ── AI Root Cause Report (admin only) ───────────────────────────────────────
+# ── AI Narrator (admin only) ─────────────────────────────────────────────────
+@router.get("/ai-narrator")
+async def ai_narrator(user=Depends(get_current_user)):
+    if user.get("role") not in ("admin", "agent"):
+        raise HTTPException(status_code=403, detail="Not allowed")
+    db = get_db()
+    now = datetime.utcnow()
+    last_24h = now - timedelta(hours=24)
+    last_1h  = now - timedelta(hours=1)
+
+    # Fetch recent data
+    all_docs   = await db.complaints.find({}).to_list(length=500)
+    today_docs = [d for d in all_docs if d.get("created_at") and d["created_at"] >= last_24h]
+    hour_docs  = [d for d in all_docs if d.get("created_at") and d["created_at"] >= last_1h]
+
+    open_count   = sum(1 for d in all_docs if d.get("status") == "open")
+    inprog_count = sum(1 for d in all_docs if d.get("status") == "in-progress")
+    breaches     = sum(1 for d in all_docs if d.get("sla_deadline") and d["sla_deadline"] < now and d.get("status") != "resolved")
+    high_prio    = sum(1 for d in all_docs if d.get("priority") == "high" and d.get("status") != "resolved")
+
+    # Category breakdown today
+    today_cats = dict(Counter(d.get("category") for d in today_docs))
+    top_cat    = max(today_cats, key=today_cats.get) if today_cats else None
+
+    # Sentiment today
+    today_sentiments = dict(Counter(d.get("sentiment") for d in today_docs))
+    neg_pct = round(today_sentiments.get("negative", 0) / max(len(today_docs), 1) * 100)
+
+    # Most urgent unresolved
+    urgent = [d for d in all_docs if d.get("priority") == "high" and d.get("status") != "resolved"]
+    urgent_titles = [d.get("title", "") for d in urgent[:3]]
+
+    if not all_docs:
+        return {"narrative": "No complaints in the system yet. The platform is ready to receive and process customer complaints.", "generated_at": now.isoformat(), "stats": {}}
+
+    try:
+        from ai_service import _chat
+        prompt = f"""You are an AI operations analyst for a customer complaint management platform. Write a concise, insightful real-time status briefing for the admin. Sound like a smart analyst, not a robot. Be specific with numbers. Max 3 sentences.
+
+Current data:
+- Total complaints in system: {len(all_docs)}
+- New in last 24 hours: {len(today_docs)}
+- New in last 1 hour: {len(hour_docs)}
+- Currently open: {open_count}
+- In progress: {inprog_count}
+- SLA breaches right now: {breaches}
+- High priority unresolved: {high_prio}
+- Top category today: {top_cat or 'N/A'} ({today_cats.get(top_cat, 0) if top_cat else 0} complaints)
+- Negative sentiment today: {neg_pct}%
+- Most urgent titles: {urgent_titles}
+
+Write the briefing now. Start directly with the insight, no preamble:"""
+
+        narrative = _chat(prompt)
+        return {
+            "narrative": narrative,
+            "generated_at": now.isoformat(),
+            "stats": {
+                "today": len(today_docs),
+                "last_hour": len(hour_docs),
+                "open": open_count,
+                "breaches": breaches,
+                "high_priority": high_prio,
+                "neg_pct": neg_pct,
+            }
+        }
+    except Exception as e:
+        print(f"[NARRATOR] failed: {e}")
+        # Fallback to template narrative
+        narrative = f"{len(today_docs)} complaints received in the last 24 hours. "
+        if breaches > 0:
+            narrative += f"{breaches} SLA breach{'es' if breaches > 1 else ''} require immediate attention. "
+        if high_prio > 0:
+            narrative += f"{high_prio} high-priority complaint{'s' if high_prio > 1 else ''} pending resolution."
+        return {"narrative": narrative.strip(), "generated_at": now.isoformat(), "stats": {"today": len(today_docs), "breaches": breaches, "high_priority": high_prio}}
+
+# ── Complaint Heatmap (admin/agent) ──────────────────────────────────────────
+@router.get("/heatmap")
+async def complaint_heatmap(user=Depends(get_current_user)):
+    if user.get("role") not in ("admin", "agent"):
+        raise HTTPException(status_code=403, detail="Not allowed")
+    db = get_db()
+    role = user.get("role")
+    uid  = str(user["_id"])
+
+    query = {} if role == "admin" else {"$or": [{"assigned_agent_id": uid}, {"channel": user.get("agent_channel")}]}
+    # Last 8 weeks
+    cutoff = datetime.utcnow() - timedelta(weeks=8)
+    query["created_at"] = {"$gte": cutoff}
+
+    docs = await db.complaints.find(query, {"created_at": 1}).to_list(length=5000)
+
+    # Build 7×24 matrix (day_of_week × hour)
+    matrix = [[0] * 24 for _ in range(7)]
+    for d in docs:
+        dt = d.get("created_at")
+        if dt:
+            matrix[dt.weekday()][dt.hour] += 1
+
+    max_val = max(max(row) for row in matrix) or 1
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    return {
+        "matrix": matrix,
+        "max_value": max_val,
+        "days": days,
+        "total_in_period": len(docs),
+    }
+
+# ── Similar complaints ────────────────────────────────────────────────────────
+@router.get("/{complaint_id}/similar")
+async def get_similar_complaints(complaint_id: str, user=Depends(get_current_user)):
+    db = get_db()
+    doc = await db.complaints.find_one({"_id": ObjectId(complaint_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not can_view(doc, user):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Find complaints with same category, excluding current
+    same_cat = await db.complaints.find({
+        "_id": {"$ne": ObjectId(complaint_id)},
+        "category": doc.get("category"),
+        "status": "resolved",  # only show resolved — so agent sees how it was fixed
+    }).sort("created_at", -1).limit(50).to_list(length=50)
+
+    if not same_cat:
+        # Fallback: any resolved complaint
+        same_cat = await db.complaints.find({
+            "_id": {"$ne": ObjectId(complaint_id)},
+            "status": "resolved",
+        }).sort("created_at", -1).limit(50).to_list(length=50)
+
+    if not same_cat:
+        return {"similar": []}
+
+    # Score by word overlap with current complaint
+    import re
+    def normalize(text):
+        return set(re.sub(r'[^\w\s]', '', text.lower()).split())
+
+    current_words = normalize(f"{doc.get('title','')} {doc.get('description','')[:200]}")
+
+    scored = []
+    for s in same_cat:
+        s_words = normalize(f"{s.get('title','')} {s.get('description','')[:200]}")
+        if not current_words or not s_words:
+            continue
+        overlap = len(current_words & s_words) / len(current_words | s_words)
+        scored.append((overlap, s))
+
+    scored.sort(key=lambda x: -x[0])
+    top = scored[:3]
+
+    result = []
+    for score, s in top:
+        # Get last agent message as resolution note
+        messages = s.get("messages", [])
+        resolution_note = next(
+            (m["text"] for m in reversed(messages) if m.get("sender_role") == "agent"),
+            None
+        )
+        # Get status history note
+        status_history = s.get("status_history", [])
+        resolution_audit = next(
+            (h["note"] for h in reversed(status_history) if h.get("to_status") == "resolved" and h.get("note")),
+            None
+        )
+        result.append({
+            "id": str(s["_id"]),
+            "title": s.get("title", ""),
+            "category": s.get("category", ""),
+            "priority": s.get("priority", ""),
+            "channel": s.get("channel", ""),
+            "similarity_score": round(score * 100),
+            "resolution_note": resolution_audit or resolution_note or "Resolved without notes.",
+            "resolved_at": s.get("updated_at", "").isoformat() if s.get("updated_at") else "",
+            "summary": s.get("summary", ""),
+        })
+
+    return {"similar": result}
 @router.get("/report/root-cause")
 async def root_cause_report(user=Depends(get_current_user)):
     if user.get("role") != "admin":

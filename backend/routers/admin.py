@@ -12,6 +12,7 @@ from datetime import datetime
 router = APIRouter()
 
 VALID_CHANNELS = {"whatsapp", "email", "phone", "chat", "web"}
+VALID_SPECIALIZATIONS = {"Billing", "Technical", "Delivery", "Product", "Service", "Account", "General"}
 
 def require_admin(user=Depends(get_current_user)):
     if user.get("role") != "admin":
@@ -24,12 +25,14 @@ def serialize_agent(u):
         "name": u.get("name", ""),
         "email": u.get("email", ""),
         "agent_channel": u.get("agent_channel", ""),
+        "specialization": u.get("specialization", "General"),
         "role": u.get("role", "agent"),
         "active": u.get("active", True),
     }
 
 class AgentUpdate(BaseModel):
     agent_channel: Optional[str] = None
+    specialization: Optional[str] = None
     active: Optional[bool] = None
     name: Optional[str] = None
 
@@ -63,6 +66,10 @@ async def update_agent(agent_id: str, body: AgentUpdate, admin=Depends(require_a
         if body.agent_channel not in VALID_CHANNELS:
             raise HTTPException(status_code=400, detail="Invalid channel")
         update["agent_channel"] = body.agent_channel
+    if body.specialization is not None:
+        if body.specialization not in VALID_SPECIALIZATIONS:
+            raise HTTPException(status_code=400, detail="Invalid specialization")
+        update["specialization"] = body.specialization
     if body.active is not None:
         update["active"] = body.active
     if body.name is not None:

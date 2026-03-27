@@ -57,7 +57,7 @@ export default function Contact() {
               className="lg:col-span-2 space-y-4"
             >
               {info.map(({ icon: Icon, label, value }) => (
-                <div key={label} className="flex items-start gap-4 bg-slate-900/50 border border-theme rounded-2xl p-5">
+                <div key={label} className="flex items-start gap-4 rounded-2xl p-5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
                   <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
                     <Icon size={18} className="text-violet-400" />
                   </div>
@@ -72,7 +72,7 @@ export default function Contact() {
             {/* Form */}
             <motion.div
               initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }}
-              className="lg:col-span-3 bg-slate-900/50 border border-theme rounded-2xl p-8"
+              className="lg:col-span-3 rounded-2xl p-8" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
             >
               <h2 className="text-lg font-semibold mb-6">Send a message</h2>
               <form onSubmit={handleSubmit} className="space-y-4">

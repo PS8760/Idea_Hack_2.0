@@ -21,7 +21,7 @@ const root = createRoot(document.getElementById('root'))
 const AppContent = () => {
   return (
     <StrictMode>
-      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID || ""}>
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID || "placeholder-disabled"}>
         <BrowserRouter>
           <App />
           <Toaster position="top-right" />

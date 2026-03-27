@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { ShieldAlert, Menu, X, ChevronRight } from 'lucide-react'
+import { useTheme } from '../context/ThemeContext'
+import { ShieldAlert, Menu, X, ChevronRight, Sun, Moon } from 'lucide-react'
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
   const [open, setOpen] = useState(false)
   const { user } = useAuth()
+  const { theme, toggle } = useTheme()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -54,6 +56,14 @@ export default function Navbar() {
 
         {/* CTA */}
         <div className="hidden md:flex items-center gap-3">
+          <button
+            onClick={toggle}
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-slate-800/40"
+            style={{ color: 'var(--text-muted)' }}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
           {user ? (
             <button
               onClick={() => navigate('/app')}
@@ -74,9 +84,18 @@ export default function Navbar() {
         </div>
 
         {/* Mobile toggle */}
-        <button onClick={() => setOpen(!open)} className="md:hidden text-slate-400 hover:text-slate-100">
-          {open ? <X size={20} /> : <Menu size={20} />}
-        </button>
+        <div className="md:hidden flex items-center gap-2">
+          <button
+            onClick={toggle}
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+          <button onClick={() => setOpen(!open)} className="text-slate-400 hover:text-slate-100">
+            {open ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile menu */}

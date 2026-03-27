@@ -58,8 +58,10 @@ export default function Login() {
   }
 
   // Google OAuth login handler - always call hook, use conditionally
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
   const handleGoogleLogin = useGoogleLogin({
     onSuccess: async (codeResponse) => {
+      if (!googleClientId) return
       setGoogleLoading(true)
       try {
         const result = await loginWithGoogle(codeResponse.access_token, form.role)

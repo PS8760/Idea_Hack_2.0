@@ -39,11 +39,13 @@ async def get_threads(user=Depends(get_current_user)):
     db = get_db()
 
     if role == "admin":
-        # Return one entry per agent that has messages
+        # Get ALL agents (not just ones with messages)
+        all_agents = await db.users.find({"role": "agent"}).to_list(length=200)
+
+        # Get message summaries for agents that have messages
         pipeline = [
             {"$group": {
                 "_id": "$agent_id",
-                "agent_name": {"$first": "$agent_name"},
                 "last_msg": {"$last": "$text"},
                 "last_at": {"$last": "$at"},
                 "unread": {"$sum": {"$cond": [
@@ -51,19 +53,36 @@ async def get_threads(user=Depends(get_current_user)):
                     1, 0
                 ]}},
             }},
-            {"$sort": {"last_at": -1}},
         ]
-        threads = await db.internal_messages.aggregate(pipeline).to_list(length=200)
-        return [
-            {
-                "agent_id": str(t["_id"]),
-                "agent_name": t.get("agent_name", "Unknown"),
-                "last_msg": t.get("last_msg", ""),
-                "last_at": t.get("last_at", ""),
-                "unread": t.get("unread", 0),
-            }
-            for t in threads
-        ]
+        msg_summaries = await db.internal_messages.aggregate(pipeline).to_list(length=200)
+        msg_map = {str(t["_id"]): t for t in msg_summaries}
+
+        # Merge agents with their message summaries
+        threads = []
+        for agent in all_agents:
+            aid = str(agent["_id"])
+            summary = msg_map.get(aid, {})
+            threads.append({
+                "agent_id": aid,
+                "agent_name": agent.get("name", "Unknown"),
+                "agent_channel": agent.get("agent_channel", ""),
+                "specialization": agent.get("specialization", "General"),
+                "active": agent.get("active", True),
+                "last_msg": summary.get("last_msg", ""),
+                "last_at": summary.get("last_at", ""),
+                "unread": summary.get("unread", 0),
+                "has_messages": aid in msg_map,
+            })
+
+        # Sort: unread first, then by last message time, then alphabetically
+        threads.sort(key=lambda t: (
+            -(t["unread"] > 0),
+            -(t["last_at"] != ""),
+            t["last_at"] or "",
+        ), reverse=False)
+        threads.sort(key=lambda t: t["unread"], reverse=True)
+
+        return threads
     else:
         # Agent: return summary of their own thread
         uid = str(user["_id"])
@@ -76,9 +95,12 @@ async def get_threads(user=Depends(get_current_user)):
         return [{
             "agent_id": uid,
             "agent_name": user.get("name", ""),
+            "agent_channel": user.get("agent_channel", ""),
+            "specialization": user.get("specialization", "General"),
             "last_msg": last.get("text", "") if last else "",
             "last_at": last.get("at", "") if last else "",
             "unread": unread,
+            "has_messages": last is not None,
         }]
 
 # ── Get messages in a thread ─────────────────────────────────────────────────

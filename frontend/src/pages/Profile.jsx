@@ -154,7 +154,7 @@ export default function Profile() {
               { icon: MessageSquare, label: 'WhatsApp', value: form.whatsapp || '—' },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-center gap-3 py-2 border-b border-theme last:border-0">
-                <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-slate-800/30 flex items-center justify-center shrink-0">
                   <Icon size={13} className="text-slate-400" />
                 </div>
                 <div className="flex-1">
