@@ -40,7 +40,7 @@ export default function SubmitComplaint() {
     try {
       const { data } = await api.post('/complaints/analyze-preview', { text: form.description })
       setAiPreview(data)
-    } catch { toast.error('AI analysis failed') }
+    } catch { toast.error('AI analysis failed — check your connection') }
     finally { setAnalyzing(false) }
   }
 

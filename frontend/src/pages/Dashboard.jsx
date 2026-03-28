@@ -38,10 +38,10 @@ export default function Dashboard() {
   useEffect(() => { fetchComplaints() }, [statusFilter, priorityFilter])
 
   const stats = [
-    { label: 'Total', value: complaints.length, icon: TrendingUp, color: 'text-violet-400', bg: 'bg-violet-400/10' },
-    { label: 'Open', value: complaints.filter(c => c.status === 'open').length, icon: AlertCircle, color: 'text-blue-400', bg: 'bg-blue-400/10' },
-    { label: 'In Progress', value: complaints.filter(c => c.status === 'in-progress').length, icon: Clock, color: 'text-yellow-400', bg: 'bg-yellow-400/10' },
-    { label: 'Resolved', value: complaints.filter(c => c.status === 'resolved').length, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
+    { label: 'Total',       value: complaints.length,                                          icon: TrendingUp,  color: 'text-violet-600', bg: 'bg-violet-50',  border: 'border-violet-200' },
+    { label: 'Open',        value: complaints.filter(c => c.status === 'open').length,         icon: AlertCircle, color: 'text-blue-600',   bg: 'bg-blue-50',    border: 'border-blue-200' },
+    { label: 'In Progress', value: complaints.filter(c => c.status === 'in-progress').length,  icon: Clock,       color: 'text-yellow-600', bg: 'bg-yellow-50',  border: 'border-yellow-200' },
+    { label: 'Resolved',    value: complaints.filter(c => c.status === 'resolved').length,     icon: CheckCircle2,color: 'text-emerald-600',bg: 'bg-emerald-50', border: 'border-emerald-200' },
   ]
 
   const filtered = complaints.filter(c =>
@@ -56,8 +56,8 @@ export default function Dashboard() {
           <h1 className="text-2xl font-semibold">
             {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'agent' ? 'Agent Dashboard' : 'My Dashboard'}
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+            {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
         {user?.role === 'user' && (
@@ -71,15 +71,14 @@ export default function Dashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {stats.map((s, i) => (
-          <motion.div
-            key={s.label}
+          <motion.div key={s.label}
             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.07 }}
-            className="bg-[#0d1117] border border-slate-800/60 rounded-2xl p-5"
+            className={`rounded-2xl p-5 border ${s.border} ${s.bg}`}
           >
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs text-slate-500">{s.label}</span>
-              <div className={`w-8 h-8 rounded-xl ${s.bg} flex items-center justify-center`}>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.label}</span>
+              <div className={`w-8 h-8 rounded-xl bg-white/70 flex items-center justify-center`}>
                 <s.icon size={15} className={s.color} />
               </div>
             </div>
@@ -98,20 +97,22 @@ export default function Dashboard() {
           onKeyDown={e => e.key === 'Enter' && fetchComplaints()}
           className="input-field w-52"
         />
-        <div className="flex gap-1 bg-slate-900/60 border border-slate-800/60 rounded-xl p-1">
+        <div className="flex gap-1 rounded-xl p-1" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
           {STATUSES.map(s => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 rounded-lg text-xs capitalize transition-colors ${
-                statusFilter === s ? 'bg-violet-600 text-white' : 'text-slate-500 hover:text-slate-300'
-              }`}>{s}</button>
+                statusFilter === s ? 'bg-violet-600 text-white' : ''
+              }`}
+              style={statusFilter !== s ? { color: 'var(--text-muted)' } : {}}>{s}</button>
           ))}
         </div>
-        <div className="flex gap-1 bg-slate-900/60 border border-slate-800/60 rounded-xl p-1">
+        <div className="flex gap-1 rounded-xl p-1" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
           {PRIORITIES.map(p => (
             <button key={p} onClick={() => setPriorityFilter(p)}
               className={`px-3 py-1.5 rounded-lg text-xs capitalize transition-colors ${
-                priorityFilter === p ? 'bg-violet-600 text-white' : 'text-slate-500 hover:text-slate-300'
-              }`}>{p}</button>
+                priorityFilter === p ? 'bg-violet-600 text-white' : ''
+              }`}
+              style={priorityFilter !== p ? { color: 'var(--text-muted)' } : {}}>{p}</button>
           ))}
         </div>
         <button onClick={fetchComplaints} className="ml-auto text-slate-500 hover:text-slate-300 transition-colors">

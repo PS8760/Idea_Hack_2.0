@@ -1,0 +1,55 @@
+{
+  "accuracy": 94.1,
+  "cv_mean": 84.8,
+  "cv_std": 3.6,
+  "total_samples": 507,
+  "categories": [
+    "Billing",
+    "Technical",
+    "Delivery",
+    "Product",
+    "Service",
+    "Account",
+    "Refund"
+  ],
+  "per_category": {
+    "Billing": {
+      "precision": 86.7,
+      "recall": 92.9,
+      "f1": 89.7
+    },
+    "Technical": {
+      "precision": 93.3,
+      "recall": 87.5,
+      "f1": 90.3
+    },
+    "Delivery": {
+      "precision": 100.0,
+      "recall": 85.7,
+      "f1": 92.3
+    },
+    "Product": {
+      "precision": 85.7,
+      "recall": 92.3,
+      "f1": 88.9
+    },
+    "Service": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1": 100.0
+    },
+    "Account": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1": 100.0
+    },
+    "Refund": {
+      "precision": 93.8,
+      "recall": 100.0,
+      "f1": 96.8
+    }
+  },
+  "model_type": "TF-IDF + Logistic Regression",
+  "features": 15000,
+  "ngram_range": "1-2"
+}

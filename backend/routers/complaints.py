@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from database import get_db
 from models import ComplaintCreate, ComplaintUpdate, AnalyzePreviewRequest
 from auth_utils import get_current_user
-from ai_service import analyze_complaint, suggest_reply
+from ai_service import analyze_complaint, suggest_reply, ai_assist_step, bullet_summary
 from duplicate_detector import embed, find_duplicates
 from email_service import send_escalation_email
 from bson import ObjectId
 from datetime import datetime, timedelta
 from collections import Counter
+from pydantic import BaseModel
 
 router = APIRouter()
 SLA_HOURS = {"high": 4, "medium": 24, "low": 72}
@@ -16,6 +17,10 @@ ESCALATION_CHAIN = ["web", "chat", "email", "whatsapp", "phone"]
 def serialize(doc) -> dict:
     doc["_id"] = str(doc["_id"])
     doc.pop("embedding", None)
+    # Ensure datetime fields are ISO strings so JS can parse them correctly
+    for field in ("created_at", "updated_at", "sla_deadline"):
+        if field in doc and hasattr(doc[field], "isoformat"):
+            doc[field] = doc[field].isoformat() + "Z"
     return doc
 
 def can_view(doc, user) -> bool:
@@ -34,7 +39,7 @@ def can_view(doc, user) -> bool:
 # ── Analyze preview ─────────────────────────────────────────────────────────
 @router.post("/analyze-preview")
 async def analyze_preview(body: AnalyzePreviewRequest, user=Depends(get_current_user)):
-    result = analyze_complaint(body.text)
+    result = await analyze_complaint(body.text)
     db = get_db()
     dups = await find_duplicates(db, body.text)
     result["is_duplicate"] = len(dups) > 0
@@ -44,7 +49,7 @@ async def analyze_preview(body: AnalyzePreviewRequest, user=Depends(get_current_
 @router.post("")
 async def create_complaint(body: ComplaintCreate, user=Depends(get_current_user)):
     db = get_db()
-    ai = analyze_complaint(body.description)
+    ai = await analyze_complaint(body.description)
     embedding = embed(f"{body.title} {body.description}")
     dups = await find_duplicates(db, f"{body.title} {body.description}")
 
@@ -183,13 +188,140 @@ async def suggest_reply_endpoint(complaint_id: str, user=Depends(get_current_use
     doc = await db.complaints.find_one({"_id": ObjectId(complaint_id)})
     if not doc or not can_view(doc, user):
         raise HTTPException(status_code=403, detail="Access denied")
-    # Include escalation history in context
-    history_ctx = ""
-    for e in doc.get("escalation_history", []):
-        history_ctx += f"\n- Escalated from {e['from']} to {e['to']}: {e['reason']}"
-    return {"suggestion": suggest_reply(doc["title"], doc["description"] + history_ctx, doc.get("category", ""))}
+    suggestion = await suggest_reply(
+        doc["title"],
+        doc["description"],
+        doc.get("category", ""),
+        doc.get("escalation_history", [])
+    )
+    return {"suggestion": suggestion}
 
-# ── Escalate complaint ──────────────────────────────────────────────────────
+# ── AI Assistant (step-by-step user guidance) ────────────────────────────────
+class AssistRequest(BaseModel):
+    conversation: list  # [{"role": "user"|"assistant", "content": str}]
+
+@router.post("/{complaint_id}/assist")
+async def ai_assist(complaint_id: str, body: AssistRequest, user=Depends(get_current_user)):
+    db = get_db()
+    doc = await db.complaints.find_one({"_id": ObjectId(complaint_id)})
+    if not doc or not can_view(doc, user):
+        raise HTTPException(status_code=403, detail="Access denied")
+    reply = await ai_assist_step(
+        doc["title"], doc["description"],
+        doc.get("category", "Other"),
+        body.conversation
+    )
+    return {"reply": reply}
+
+
+# ── AI bullet-point summary ──────────────────────────────────────────────────
+@router.get("/{complaint_id}/bullet-summary")
+async def get_bullet_summary(complaint_id: str, user=Depends(get_current_user)):
+    db = get_db()
+    doc = await db.complaints.find_one({"_id": ObjectId(complaint_id)})
+    if not doc or not can_view(doc, user):
+        raise HTTPException(status_code=403, detail="Access denied")
+    points = await bullet_summary(doc["title"], doc["description"], doc.get("category", "Other"))
+    return {"points": points}
+
+
+# ── Targeted escalation — agent picks the target agent ──────────────────────
+class EscalateRequest(BaseModel):
+    target_agent_id: str
+    reason: str = ""  # agent-provided reason for escalation
+
+@router.post("/{complaint_id}/escalate-to")
+async def escalate_to_agent(complaint_id: str, body: EscalateRequest, user=Depends(get_current_user)):
+    db = get_db()
+    doc = await db.complaints.find_one({"_id": ObjectId(complaint_id)})
+    if not doc or not can_view(doc, user):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if user.get("role") not in ("agent", "admin"):
+        raise HTTPException(status_code=403, detail="Only agents and admins can escalate")
+
+    target = await db.users.find_one({"_id": ObjectId(body.target_agent_id), "role": "agent"})
+    if not target:
+        raise HTTPException(status_code=404, detail="Target agent not found")
+
+    current_channel = doc.get("channel", "web")
+    current_messages = doc.get("messages", [])
+    history = doc.get("escalation_history", [])
+
+    chat_summary = ""
+    if current_messages:
+        lines = [f"{m['sender_name']} ({m['sender_role']}): {m['text']}" for m in current_messages]
+        try:
+            from ai_service import summarize_text
+            chat_summary = await summarize_text("\n".join(lines))
+        except Exception:
+            chat_summary = f"{len(current_messages)} messages exchanged."
+
+    history.append({
+        "from": current_channel,
+        "to": target.get("agent_channel", "web"),
+        "reason": body.reason.strip() or f"Escalated to {target.get('name')} by {user.get('name', 'agent')}.",
+        "at": datetime.utcnow().isoformat(),
+        "escalated_by": str(user["_id"]),
+        "escalated_by_name": user.get("name", ""),
+        "chat_snapshot": current_messages,
+        "chat_summary": chat_summary,
+    })
+
+    update = {
+        "channel": target.get("agent_channel", current_channel),
+        "escalated_to": target.get("agent_channel"),
+        "escalation_history": history,
+        "assigned_agent_id": str(target["_id"]),
+        "assigned_agent": target.get("name", ""),
+        "status": "open",
+        "updated_at": datetime.utcnow(),
+        "messages": [],
+    }
+    await db.complaints.update_one({"_id": ObjectId(complaint_id)}, {"$set": update})
+
+    owner = await db.users.find_one({"_id": ObjectId(doc["user_id"])})
+    if owner and owner.get("email"):
+        await send_escalation_email(
+            owner["email"], owner.get("name", "User"),
+            doc["title"], current_channel, target.get("agent_channel", ""), history[-1]["reason"]
+        )
+
+    return serialize(await db.complaints.find_one({"_id": ObjectId(complaint_id)}))
+
+
+# ── List agents (for escalation picker) ─────────────────────────────────────
+@router.get("/{complaint_id}/available-agents")
+async def available_agents(complaint_id: str, user=Depends(get_current_user)):
+    if user.get("role") not in ("agent", "admin"):
+        raise HTTPException(status_code=403, detail="Agents and admins only")
+    db = get_db()
+    cursor = db.users.find({"role": "agent", "active": {"$ne": False}})
+    agents = []
+    async for a in cursor:
+        if str(a["_id"]) != str(user["_id"]):  # exclude self
+            agents.append({
+                "id": str(a["_id"]),
+                "name": a.get("name", ""),
+                "channel": a.get("agent_channel", "web"),
+                "specialization": a.get("specialization", "General"),
+            })
+    return agents
+
+
+# ── Delete complaint (owner or admin only) ──────────────────────────────────
+@router.delete("/{complaint_id}")
+async def delete_complaint(complaint_id: str, user=Depends(get_current_user)):
+    db = get_db()
+    doc = await db.complaints.find_one({"_id": ObjectId(complaint_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Not found")
+    role = user.get("role", "user")
+    uid = str(user["_id"])
+    # Only the complaint owner or an admin can delete
+    if role != "admin" and doc.get("user_id") != uid:
+        raise HTTPException(status_code=403, detail="Access denied")
+    await db.complaints.delete_one({"_id": ObjectId(complaint_id)})
+    return {"deleted": True}
 @router.post("/{complaint_id}/escalate")
 async def escalate_complaint(complaint_id: str, user=Depends(get_current_user)):
     db = get_db()
@@ -217,7 +349,7 @@ async def escalate_complaint(complaint_id: str, user=Depends(get_current_user)):
         lines = [f"{m['sender_name']} ({m['sender_role']}): {m['text']}" for m in current_messages]
         try:
             from ai_service import summarize_text
-            chat_summary = summarize_text("\n".join(lines))
+            chat_summary = await summarize_text("\n".join(lines))
         except Exception:
             chat_summary = f"{len(current_messages)} messages exchanged via {current_channel} channel."
 

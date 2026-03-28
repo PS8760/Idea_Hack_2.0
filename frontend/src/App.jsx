@@ -1,7 +1,9 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { NotificationProvider } from './context/NotificationContext'
+import { ThemeProvider } from './context/ThemeContext'
 import { Toaster } from 'react-hot-toast'
+import ErrorBoundary from './components/ErrorBoundary'
 
 // Public pages
 import Landing from './pages/Landing'
@@ -22,11 +24,13 @@ import AgentQueue from './pages/AgentQueue'
 import AdminPanel from './pages/AdminPanel'
 import Profile from './pages/Profile'
 import InternalChat from './pages/InternalChat'
+import Reports from './pages/Reports'
+import HowItWorks from './pages/HowItWorks'
 
 function RoleRoute({ children, roles }) {
   const { user, loading } = useAuth()
   if (loading) return (
-    <div className="flex items-center justify-center h-screen bg-[#080b14]">
+    <div className="flex items-center justify-center h-screen" style={{ background: 'var(--bg-base)' }}>
       <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
@@ -37,44 +41,50 @@ function RoleRoute({ children, roles }) {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NotificationProvider>
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            style: { background: '#0f172a', color: '#e2e8f0', border: '1px solid #1e293b', fontSize: '0.875rem' },
-            success: { iconTheme: { primary: '#7c3aed', secondary: '#fff' } },
-          }}
-        />
-        <Routes>
-          {/* Public */}
-          <Route path="/" element={<Landing />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <NotificationProvider>
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                style: { background: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border)', fontSize: '0.875rem' },
+                success: { iconTheme: { primary: '#7c3aed', secondary: '#fff' } },
+              }}
+            />
+            <Routes>
+              {/* Public */}
+              <Route path="/" element={<Landing />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
 
-          {/* App shell */}
-          <Route path="/app" element={<RoleRoute><AppLayout /></RoleRoute>}>
-            <Route index element={<Dashboard />} />
-            <Route path="complaints/:id" element={<ComplaintDetail />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="insights" element={<RoleRoute roles={['admin','agent']}><Insights /></RoleRoute>} />
+              {/* App shell */}
+              <Route path="/app" element={<RoleRoute><AppLayout /></RoleRoute>}>
+                <Route index element={<Dashboard />} />
+                <Route path="complaints/:id" element={<ComplaintDetail />} />
+                <Route path="profile" element={<Profile />} />
+                <Route path="insights" element={<RoleRoute roles={['admin','agent']}><Insights /></RoleRoute>} />
 
-            {/* User */}
-            <Route path="submit" element={<RoleRoute roles={['user']}><SubmitComplaint /></RoleRoute>} />
-            <Route path="my-complaints" element={<RoleRoute roles={['user']}><MyComplaints /></RoleRoute>} />
+                {/* User */}
+                <Route path="submit" element={<RoleRoute roles={['user']}><SubmitComplaint /></RoleRoute>} />
+                <Route path="my-complaints" element={<RoleRoute roles={['user']}><MyComplaints /></RoleRoute>} />
 
-            {/* Agent + Admin */}
-            <Route path="queue" element={<RoleRoute roles={['agent','admin']}><AgentQueue /></RoleRoute>} />
+                {/* Agent + Admin */}
+                <Route path="queue" element={<RoleRoute roles={['agent','admin']}><AgentQueue /></RoleRoute>} />
 
-            {/* Admin */}
-            <Route path="admin" element={<RoleRoute roles={['admin']}><AdminPanel /></RoleRoute>} />
-            <Route path="messages" element={<RoleRoute roles={['admin','agent']}><InternalChat /></RoleRoute>} />
-          </Route>
+                {/* Admin */}
+                <Route path="admin" element={<RoleRoute roles={['admin']}><AdminPanel /></RoleRoute>} />
+                <Route path="messages" element={<RoleRoute roles={['admin','agent']}><InternalChat /></RoleRoute>} />
+                <Route path="reports" element={<RoleRoute roles={['admin']}><Reports /></RoleRoute>} />
+                <Route path="how-it-works" element={<HowItWorks />} />
+              </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </NotificationProvider>
-    </AuthProvider>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </NotificationProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   )
 }
