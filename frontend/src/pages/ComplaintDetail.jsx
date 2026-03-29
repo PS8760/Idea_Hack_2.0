@@ -798,21 +798,31 @@ export default function ComplaintDetail() {
                   <Sparkles size={11} /> AI Summary
                 </div>
                 {canEdit ? (
-                  // Admin/Agent: bullet points
-                  Array.isArray(summary) ? (
-                    <ul className="space-y-2">
-                      {summary.map((point, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm" style={{ color: 'var(--text-primary)' }}>
-                          <span className="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 shrink-0" />
-                          {point}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>{summary}</p>
-                  )
+                  (() => {
+                    const points = Array.isArray(summary)
+                      ? summary
+                      : summary.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean)
+                    // Detect raw description echoed back (first-person user sentences)
+                    const isRawDesc = points.length > 0 && points.every(p =>
+                      /^(i'?m |i tried|i am |even after|please |kindly |this is |after entering|i have|i want|i need)/i.test(p.trim())
+                    )
+                    if (isRawDesc || points.length === 0) return (
+                      <p className="text-xs italic" style={{ color: 'var(--text-muted)' }}>
+                        Summary not available — resubmit complaint to generate.
+                      </p>
+                    )
+                    return (
+                      <ul className="space-y-2">
+                        {points.map((point, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm" style={{ color: 'var(--text-primary)' }}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 shrink-0" />
+                            {point}
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  })()
                 ) : (
-                  // User: single sentence (join if array)
                   <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>
                     {Array.isArray(summary) ? summary.join('. ') : summary}
                   </p>
