@@ -109,7 +109,7 @@ Required keys:
 - "priority": "high" or "medium" or "low"
 - "category": one of Billing, Technical, Delivery, Product, Service, Account, Refund, Other
 - "product": specific product/service name inferred from complaint (max 3 words, e.g. "Payment Gateway", "Broadband Service", "Mobile App")
-- "summary": A single factual sentence (max 30 words) capturing: (1) what the user is experiencing, (2) the specific impact, and (3) what they want resolved. Never use generic phrases like "customer is facing an issue". Be specific to the complaint text. Example: "User cannot log in despite correct credentials and is not receiving OTP for password reset, requesting immediate account access restoration."
+- "summary": A JSON array of exactly 2 to 3 short bullet points (each max 15 words) for agent/admin quick scan. Each point must be a distinct factual observation from the complaint. Cover: (1) the core problem, (2) the impact or consequence, (3) what the user wants (if clear). Never use generic phrases. Be specific to the complaint text. Example: ["Cannot log in despite correct credentials", "OTP for password reset not being received", "Requesting immediate account access restoration"]
 - "key_issues": array of 3-5 short strings, each describing a distinct specific problem extracted directly from the complaint text (e.g. ["Double charge on invoice", "No confirmation email received", "Support unresponsive for 3 days"]). Be precise and factual — pull real details from the text.
 - "urgency_signals": array of 0-3 strings for urgency indicators (e.g. ["Financial loss mentioned", "Repeat complaint", "Threatening escalation"])
 - "suggested_actions": array of exactly 3 short agent action strings (e.g. ["Check transaction logs", "Issue refund within 24h", "Send apology"])
@@ -140,16 +140,25 @@ JSON only:"""
         result.setdefault("urgency_signals", [])
         result.setdefault("suggested_actions", [])
         result.setdefault("product", "General")
+        # Ensure summary is always a list of 2-3 points
+        summary = result.get("summary", [])
+        if isinstance(summary, str):
+            # model returned a string — split on sentence boundaries
+            import re as _re
+            pts = [s.strip() for s in _re.split(r'(?<=[.!?])\s+', summary) if s.strip()]
+            result["summary"] = pts[:3] if pts else [summary]
+        elif isinstance(summary, list):
+            result["summary"] = [str(p).strip() for p in summary[:3] if str(p).strip()]
         # Always use keyword-extracted title
         result["title"] = keyword_title
         return result
     except Exception as e:
         print(f"[AI ERROR] analyze_complaint failed: {e}")
         sentences = re.split(r'(?<=[.!?])\s+', text.strip())
-        fallback_summary = " ".join(sentences[:2])[:200].strip()
+        fallback_summary = [s.strip() for s in sentences[:3] if s.strip()]
         return {
             "sentiment": "neutral", "priority": "medium", "category": "Other",
-            "product": "General", "summary": fallback_summary or text[:150],
+            "product": "General", "summary": fallback_summary or [text[:120]],
             "title": keyword_title,
             "key_issues": [], "urgency_signals": [], "suggested_actions": [],
             "severity_score": 5

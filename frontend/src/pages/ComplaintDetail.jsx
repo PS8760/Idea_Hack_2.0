@@ -794,10 +794,29 @@ export default function ComplaintDetail() {
             {/* AI Summary */}
             {summary && (
               <div className="rounded-2xl p-5 bg-violet-500/5 border border-violet-500/15">
-                <div className="flex items-center gap-1.5 text-xs text-violet-400 mb-2">
+                <div className="flex items-center gap-1.5 text-xs text-violet-400 mb-3">
                   <Sparkles size={11} /> AI Summary
                 </div>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>{summary}</p>
+                {canEdit ? (
+                  // Admin/Agent: bullet points
+                  Array.isArray(summary) ? (
+                    <ul className="space-y-2">
+                      {summary.map((point, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm" style={{ color: 'var(--text-primary)' }}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 shrink-0" />
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>{summary}</p>
+                  )
+                ) : (
+                  // User: single sentence (join if array)
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>
+                    {Array.isArray(summary) ? summary.join('. ') : summary}
+                  </p>
+                )}
               </div>
             )}
 
