@@ -71,7 +71,7 @@ const CHANNELS = [
   { value: 'email',    label: 'Email',     icon: Mail,           color: 'text-blue-400' },
   { value: 'whatsapp', label: 'WhatsApp',  icon: MessageSquare,  color: 'text-emerald-400' },
   { value: 'phone',    label: 'Phone',     icon: Phone,          color: 'text-yellow-400' },
-  { value: 'chat',     label: 'Live Chat', icon: MessageCircle,  color: 'text-violet-400' },
+
 ]
 
 const SENTIMENT_CONFIG = {
@@ -469,7 +469,7 @@ export default function SubmitComplaint() {
             <label className="text-xs font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>
               Preferred Contact Channel
             </label>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {CHANNELS.map(({ value, label, icon: Icon, color }) => (
                 <button
                   key={value} type="button" onClick={() => set('channel', value)}

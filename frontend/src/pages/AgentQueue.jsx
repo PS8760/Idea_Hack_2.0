@@ -72,7 +72,7 @@ function QueueRow({ complaint, onStatusChange }) {
       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
     >
       <div className="flex flex-col items-center gap-1.5 pt-1 shrink-0">
-        <div className={`w-2.5 h-2.5 rounded-full ${pm.dot} ${priority === 'high' ? 'animate-pulse' : ''}`} />
+        <div className={`w-2.5 h-2.5 rounded-full ${status === 'resolved' ? 'bg-slate-600' : pm.dot} ${priority === 'high' && status !== 'resolved' ? 'animate-pulse' : ''}`} />
         <ChannelIcon size={11} style={{ color: 'var(--text-muted)' }} />
       </div>
 

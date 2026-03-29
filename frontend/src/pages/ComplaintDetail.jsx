@@ -11,7 +11,8 @@ import {
   ArrowLeft, Sparkles, Loader2, Copy, MessageSquare, Mail,
   Phone, Globe, GitBranch, Clock, User, Send, CheckCircle2,
   PlayCircle, AlertTriangle, ChevronRight, Zap, Target,
-  ShieldAlert, Activity, Tag, TrendingUp, MessageCircle
+  ShieldAlert, Activity, Tag, TrendingUp, MessageCircle, Trash2,
+  UserCheck, ArrowRightLeft
 } from 'lucide-react'
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts'
 
@@ -439,6 +440,144 @@ function EmailReplyBox({ complaintId, complaint }) {
   )
 }
 
+// ── Reassign Panel (admin only) ───────────────────────────────────────────────
+function ReassignPanel({ complaint, onReassigned }) {
+  const [agents, setAgents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [reassigning, setReassigning] = useState(false)
+  const [selected, setSelected] = useState('')
+  const [showConfirm, setShowConfirm] = useState(false)
+
+  useEffect(() => {
+    api.get('/admin/agents')
+      .then(({ data }) => setAgents(data.filter(a => a.active !== false && a.id !== complaint.assigned_agent_id)))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [complaint.assigned_agent_id])
+
+  const handleReassign = async () => {
+    if (!selected) return
+    setReassigning(true)
+    try {
+      const { data } = await api.patch(`/admin/complaints/${complaint._id}/reassign`, { agent_id: selected })
+      toast.success(`Reassigned to ${data.assigned_agent}`)
+      setShowConfirm(false)
+      setSelected('')
+      onReassigned(data)
+    } catch { toast.error('Reassign failed') }
+    finally { setReassigning(false) }
+  }
+
+  const selectedAgent = agents.find(a => a.id === selected)
+  const history = complaint.reassign_history || []
+
+  return (
+    <div className="card p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <ArrowRightLeft size={14} className="text-violet-400" />
+        <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Reassign Complaint</span>
+      </div>
+
+      {/* Current agent */}
+      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+        <User size={13} className="text-violet-400 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Currently assigned to</p>
+          <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+            {complaint.assigned_agent || 'Unassigned'}
+          </p>
+        </div>
+      </div>
+
+      {/* Agent selector */}
+      {loading ? (
+        <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+          <Loader2 size={12} className="animate-spin" /> Loading agents...
+        </div>
+      ) : agents.length === 0 ? (
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No other agents available.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {agents.map(a => (
+            <button key={a.id} onClick={() => setSelected(a.id === selected ? '' : a.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all border ${
+                selected === a.id ? 'border-violet-500/60 bg-violet-500/10' : ''
+              }`}
+              style={selected !== a.id ? { borderColor: 'var(--border)', background: 'var(--bg-elevated)' } : {}}>
+              <div className="w-7 h-7 rounded-full bg-violet-600/20 flex items-center justify-center text-[11px] font-bold text-violet-400 shrink-0">
+                {a.name[0]?.toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{a.name}</p>
+                <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  {a.agent_channel} · {a.specialization || 'General'}
+                </p>
+              </div>
+              {selected === a.id && <CheckCircle2 size={14} className="text-violet-400 shrink-0" />}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {selected && (
+        <button onClick={() => setShowConfirm(true)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 transition-colors">
+          <UserCheck size={14} /> Assign to {selectedAgent?.name}
+        </button>
+      )}
+
+      {/* Reassign history */}
+      {history.length > 0 && (
+        <div>
+          <p className="text-[10px] uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Reassign History</p>
+          <div className="space-y-1.5">
+            {history.map((h, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs px-3 py-2 rounded-xl" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+                <ArrowRightLeft size={10} className="text-violet-400 mt-0.5 shrink-0" />
+                <div style={{ color: 'var(--text-muted)' }}>
+                  <span style={{ color: 'var(--text-primary)' }}>{h.from_agent_name}</span>
+                  {' → '}
+                  <span style={{ color: 'var(--text-primary)' }}>{h.to_agent_name}</span>
+                  <span className="ml-1.5 text-[10px]">by {h.by_admin} · {new Date(h.at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Confirm modal */}
+      <AnimatePresence>
+        {showConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+            <motion.div initial={{ opacity: 0, scale: 0.93 }} animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.93 }} className="w-full max-w-sm rounded-2xl p-6 shadow-2xl"
+              style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+              <div className="w-12 h-12 rounded-2xl bg-violet-400/10 flex items-center justify-center mx-auto mb-4">
+                <UserCheck size={20} className="text-violet-400" />
+              </div>
+              <h2 className="text-base font-semibold text-center mb-1" style={{ color: 'var(--text-primary)' }}>
+                Reassign Complaint?
+              </h2>
+              <p className="text-xs text-center mb-5" style={{ color: 'var(--text-muted)' }}>
+                This will move the complaint from <span style={{ color: 'var(--text-primary)' }}>{complaint.assigned_agent || 'Unassigned'}</span> to <span style={{ color: 'var(--text-primary)' }}>{selectedAgent?.name}</span>. Both agents will be able to see this change.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={handleReassign} disabled={reassigning}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 transition-colors">
+                  {reassigning ? <><Loader2 size={13} className="animate-spin" />Reassigning...</> : <><UserCheck size={13} />Confirm</>}
+                </button>
+                <button onClick={() => setShowConfirm(false)} className="btn-ghost px-5">Cancel</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ComplaintDetail() {
   const { id } = useParams()
@@ -452,6 +591,8 @@ export default function ComplaintDetail() {
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [escalating, setEscalating] = useState(false)
   const [similar, setSimilar] = useState([])
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -502,6 +643,18 @@ export default function ComplaintDetail() {
     finally { setEscalating(false) }
   }
 
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await api.delete(`/complaints/${id}`)
+      toast.success('Complaint deleted successfully')
+      navigate('/app/complaints')
+    } catch { toast.error('Failed to delete complaint') }
+    finally { setDeleting(false) }
+  }
+
+  const handleReassigned = (updated) => setComplaint(updated)
+
   if (loading) return (
     <div className="flex items-center justify-center h-full py-32">
       <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
@@ -524,6 +677,35 @@ export default function ComplaintDetail() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      {/* Delete confirmation modal */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+            <motion.div initial={{ opacity: 0, scale: 0.93, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.93 }} className="w-full max-w-sm rounded-2xl p-6 shadow-2xl"
+              style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+              <div className="w-12 h-12 rounded-2xl bg-red-400/10 flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={20} className="text-red-400" />
+              </div>
+              <h2 className="text-base font-semibold text-center mb-1" style={{ color: 'var(--text-primary)' }}>
+                Delete Complaint?
+              </h2>
+              <p className="text-xs text-center mb-5" style={{ color: 'var(--text-muted)' }}>
+                This complaint will be permanently removed and cannot be recovered.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={handleDelete} disabled={deleting}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition-colors">
+                  {deleting ? <><Loader2 size={13} className="animate-spin" />Deleting...</> : <><Trash2 size={13} />Delete</>}
+                </button>
+                <button onClick={() => setShowDeleteModal(false)} className="btn-ghost px-5">Cancel</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Back + Reference */}
       <div className="flex items-center justify-between mb-6">
         <button onClick={() => navigate(-1)}
@@ -534,6 +716,12 @@ export default function ComplaintDetail() {
         <div className="flex items-center gap-3">
           <span className="text-xs font-mono font-bold text-violet-400 bg-violet-400/10 border border-violet-400/20 px-3 py-1 rounded-lg">{ref}</span>
           <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{fmt(created_at)}</span>
+          {(user?.role === 'user' || user?.role === 'admin') && (
+            <button onClick={() => setShowDeleteModal(true)}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl text-red-400 bg-red-400/10 border border-red-400/20 hover:bg-red-400/20 transition-colors">
+              <Trash2 size={12} /> Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -787,6 +975,69 @@ export default function ComplaintDetail() {
               ? <StatusWorkflowPanel status={status} onUpdate={updateStatus} updating={updatingStatus} />
               : <UserStatusTracker status={status} />
             }
+
+            {/* Reassign — admin only */}
+            {user?.role === 'admin' && (
+              <ReassignPanel complaint={complaint} onReassigned={handleReassigned} />
+            )}
+
+            {/* Reassign notice — context-aware for both old and new agent */}
+            {user?.role === 'agent' && complaint.reassign_history?.length > 0 && (() => {
+              const uid = user._id || user.id
+              const latest = complaint.reassign_history[complaint.reassign_history.length - 1]
+              const isNewAgent = latest.to_agent_id === uid || complaint.assigned_agent_id === uid
+              const isOldAgent = latest.from_agent_id === uid
+
+              return (
+                <div className="card p-4 space-y-3">
+                  {/* Highlighted notice for the newly assigned agent */}
+                  {isNewAgent && (
+                    <div className="flex items-start gap-3 px-3 py-3 rounded-xl bg-violet-500/10 border border-violet-500/25">
+                      <UserCheck size={15} className="text-violet-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-violet-400 mb-0.5">Assigned to you by {latest.by_admin}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          Previously handled by <span style={{ color: 'var(--text-primary)' }}>{latest.from_agent_name || 'Unassigned'}</span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notice for the old agent */}
+                  {isOldAgent && !isNewAgent && (
+                    <div className="flex items-start gap-3 px-3 py-3 rounded-xl bg-orange-500/10 border border-orange-500/25">
+                      <ArrowRightLeft size={15} className="text-orange-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-orange-400 mb-0.5">Complaint reassigned by {latest.by_admin}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          Moved to <span style={{ color: 'var(--text-primary)' }}>{latest.to_agent_name}</span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Full history if more than one entry */}
+                  {complaint.reassign_history.length > 1 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Full History</p>
+                      <div className="space-y-1.5">
+                        {complaint.reassign_history.map((h, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs px-3 py-2 rounded-xl" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+                            <ArrowRightLeft size={10} className="text-violet-400 mt-0.5 shrink-0" />
+                            <div style={{ color: 'var(--text-muted)' }}>
+                              <span style={{ color: 'var(--text-primary)' }}>{h.from_agent_name}</span>
+                              {' → '}
+                              <span style={{ color: 'var(--text-primary)' }}>{h.to_agent_name}</span>
+                              <span className="ml-1.5 text-[10px]">by {h.by_admin} · {new Date(h.at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* SLA Panel */}
             <div className="card p-5">

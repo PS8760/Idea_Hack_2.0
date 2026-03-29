@@ -329,6 +329,8 @@ function AgentDashboard() {
   const { user } = useAuth()
   const [complaints, setComplaints] = useState([])
   const [loading, setLoading] = useState(true)
+  const [narrator, setNarrator] = useState(null)
+  const [narratorLoading, setNarratorLoading] = useState(true)
   const pollRef = useRef(null)
 
   const fetchQueue = useCallback(async () => {
@@ -339,11 +341,21 @@ function AgentDashboard() {
     finally { setLoading(false) }
   }, [])
 
+  const fetchNarrator = useCallback(async () => {
+    setNarratorLoading(true)
+    try {
+      const { data } = await api.get('/complaints/ai-narrator')
+      setNarrator(data)
+    } catch { }
+    finally { setNarratorLoading(false) }
+  }, [])
+
   useEffect(() => {
     fetchQueue()
+    fetchNarrator()
     pollRef.current = setInterval(fetchQueue, 20000)
     return () => clearInterval(pollRef.current)
-  }, [fetchQueue])
+  }, [fetchQueue, fetchNarrator])
 
   const handleStatusChange = async (id, newStatus) => {
     try {
@@ -377,9 +389,43 @@ function AgentDashboard() {
         </p>
       </div>
 
+      {/* AI Analyst */}
+      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+        className="rounded-2xl p-5 mb-6 relative overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(59,130,246,0.05))', border: '1px solid rgba(124,58,237,0.2)' }}>
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center shrink-0">
+            <Brain size={15} className="text-violet-400" />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-xs font-semibold text-violet-400 uppercase tracking-widest">AI Analyst</span>
+              {narratorLoading && <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />}
+            </div>
+            {narratorLoading ? (
+              <div className="space-y-2">
+                {[90, 70, 50].map((w, i) => <div key={i} className="h-3 rounded-full animate-pulse" style={{ background: 'var(--bg-elevated)', width: `${w}%` }} />)}
+              </div>
+            ) : (
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>{narrator?.narrative}</p>
+            )}
+            {narrator?.stats && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {narrator.stats.today > 0 && <span className="text-[10px] px-2 py-1 rounded-lg bg-violet-500/10 text-violet-400 border border-violet-500/20">{narrator.stats.today} today</span>}
+                {narrator.stats.breaches > 0 && <span className="text-[10px] px-2 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-1"><Flame size={9} />{narrator.stats.breaches} SLA breach{narrator.stats.breaches > 1 ? 'es' : ''}</span>}
+                {narrator.stats.high_priority > 0 && <span className="text-[10px] px-2 py-1 rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/20">{narrator.stats.high_priority} high priority</span>}
+              </div>
+            )}
+          </div>
+          <button onClick={fetchNarrator} disabled={narratorLoading}
+            className="shrink-0 p-1.5 rounded-lg hover:bg-violet-500/10 transition-colors text-violet-400 disabled:opacity-40">
+            <RefreshCw size={12} className={narratorLoading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+      </motion.div>
+
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        {[
+      <div className="grid grid-cols-4 gap-3 mb-6">        {[
           { label: 'Open',         value: myOpen.length,       color: 'text-blue-400',    bg: 'bg-blue-400/10',    icon: AlertCircle  },
           { label: 'In Review',    value: myInProg.length,     color: 'text-yellow-400',  bg: 'bg-yellow-400/10',  icon: PlayCircle   },
           { label: 'Resolved Today', value: resolvedToday.length, color: 'text-emerald-400', bg: 'bg-emerald-400/10', icon: CheckCircle2 },

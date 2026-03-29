@@ -20,6 +20,9 @@ export default function Navbar() {
 
   const links = [
     { to: '/', label: 'Home' },
+    { href: '#demo', label: 'How it Works' },
+    { href: '#try-demo', label: 'Try Demo' },
+    { href: '#features', label: 'Features' },
     { to: '/contact', label: 'Contact' },
   ]
 
@@ -40,17 +43,21 @@ export default function Navbar() {
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-1">
           {links.map(l => (
-            <Link
-              key={l.to}
-              to={l.to}
-              className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-                location.pathname === l.to
-                  ? ' bg-slate-800/60'
-                  : 'text-slate-400 hover: hover:bg-slate-800/40'
-              }`}
-            >
-              {l.label}
-            </Link>
+            l.href ? (
+              <a key={l.href} href={l.href}
+                className="px-4 py-2 rounded-lg text-sm transition-colors hover:bg-slate-800/30"
+                style={{ color: 'var(--text-secondary)' }}>
+                {l.label}
+              </a>
+            ) : (
+              <Link key={l.to} to={l.to}
+                className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+                  location.pathname === l.to ? 'bg-slate-800/60' : 'hover:bg-slate-800/30'
+                }`}
+                style={{ color: location.pathname === l.to ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                {l.label}
+              </Link>
+            )
           ))}
         </nav>
 

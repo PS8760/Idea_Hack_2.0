@@ -98,17 +98,36 @@ async def remove_agent(agent_id: str, admin=Depends(require_admin)):
 @router.patch("/complaints/{complaint_id}/reassign")
 async def reassign_complaint(complaint_id: str, body: ReassignBody, admin=Depends(require_admin)):
     db = get_db()
+    complaint = await db.complaints.find_one({"_id": ObjectId(complaint_id)})
+    if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
     agent = await db.users.find_one({"_id": ObjectId(body.agent_id), "role": "agent"})
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+
+    prev_agent_id   = complaint.get("assigned_agent_id", "")
+    prev_agent_name = complaint.get("assigned_agent", "Unassigned")
+
+    audit_entry = {
+        "type": "reassign",
+        "from_agent_id":   prev_agent_id,
+        "from_agent_name": prev_agent_name,
+        "to_agent_id":     str(agent["_id"]),
+        "to_agent_name":   agent.get("name", ""),
+        "by_admin":        str(admin.get("name", "Admin")),
+        "at":              datetime.utcnow().isoformat(),
+    }
+
     await db.complaints.update_one(
         {"_id": ObjectId(complaint_id)},
-        {"$set": {
-            "assigned_agent_id": str(agent["_id"]),
-            "assigned_agent": agent.get("name", ""),
-            "channel": agent.get("agent_channel", "web"),
-            "updated_at": datetime.utcnow(),
-        }}
+        {
+            "$set": {
+                "assigned_agent_id": str(agent["_id"]),
+                "assigned_agent":    agent.get("name", ""),
+                "updated_at":        datetime.utcnow(),
+            },
+            "$push": {"reassign_history": audit_entry}
+        }
     )
     from routers.complaints import serialize
     doc = await db.complaints.find_one({"_id": ObjectId(complaint_id)})

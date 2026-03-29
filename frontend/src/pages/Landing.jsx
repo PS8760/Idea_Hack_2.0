@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
@@ -9,7 +9,7 @@ import {
   ChevronRight, CheckCircle, Star, ArrowRight, Sparkles,
   Loader2, AlertTriangle, Target, Brain, Activity, Mail,
   Phone, Globe, MessageCircle, User, CheckCircle2, Bell,
-  Search, ShieldCheck
+  Search, ShieldCheck, Headphones, Settings
 } from 'lucide-react'
 
 // ── Demo data ─────────────────────────────────────────────────────────────────
@@ -370,6 +370,82 @@ function LiveDemoWidget() {
 }
 
 // ── Static data ───────────────────────────────────────────────────────────────
+const DEMO_STEPS = [
+  { id: 1, icon: MessageSquare, label: 'Submit',     activeBg: 'bg-blue-600',    color: 'text-blue-600',    bg: 'bg-blue-50',    border: 'border-blue-200',    title: 'Customer submits a complaint',       preview: { type: 'complaint'  } },
+  { id: 2, icon: Sparkles,      label: 'AI Analysis',activeBg: 'bg-violet-600',  color: 'text-violet-600',  bg: 'bg-violet-50',  border: 'border-violet-200',  title: 'AI classifies & prioritizes instantly', preview: { type: 'analysis'   } },
+  { id: 3, icon: User,          label: 'Assignment', activeBg: 'bg-emerald-600', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', title: 'Routed to the right agent',          preview: { type: 'assignment' } },
+  { id: 4, icon: Brain,         label: 'Agent Assist',activeBg: 'bg-pink-600',   color: 'text-pink-600',    bg: 'bg-pink-50',    border: 'border-pink-200',    title: 'AI drafts a reply for the agent',    preview: { type: 'reply'      } },
+  { id: 5, icon: CheckCircle2,  label: 'Resolved',   activeBg: 'bg-teal-600',   color: 'text-teal-600',    bg: 'bg-teal-50',    border: 'border-teal-200',    title: 'Complaint resolved & closed',        preview: { type: 'resolved'   } },
+]
+
+function DemoPreview({ type }) {
+  if (type === 'complaint') return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-xs text-slate-500"><Globe size={12} /> Web · Just now</div>
+      <div className="font-semibold text-slate-800">Payment deducted but order not placed</div>
+      <p className="text-sm text-slate-600 leading-relaxed">I was charged ₹2,499 for an order but it never went through. The money was deducted from my account.</p>
+      <div className="flex gap-2 pt-1">
+        <span className="text-[10px] px-2 py-1 rounded-full bg-slate-100 text-slate-500">Billing</span>
+        <span className="text-[10px] px-2 py-1 rounded-full bg-slate-100 text-slate-500">Web</span>
+      </div>
+    </div>
+  )
+  if (type === 'analysis') return (
+    <div className="space-y-2.5">
+      <div className="flex items-center gap-1.5 text-xs text-violet-600 font-medium mb-3"><Sparkles size={12} /> AI Analysis Complete</div>
+      {[
+        { label: 'Category',  value: 'Billing',  color: 'bg-blue-100 text-blue-700' },
+        { label: 'Priority',  value: 'High',     color: 'bg-red-100 text-red-700' },
+        { label: 'Sentiment', value: 'Negative', color: 'bg-orange-100 text-orange-700' },
+        { label: 'Summary',   value: 'Customer charged ₹2,499 for a failed order — refund required.', color: 'bg-slate-100 text-slate-700' },
+      ].map(item => (
+        <div key={item.label} className="flex items-start gap-3">
+          <span className="text-xs text-slate-400 w-16 shrink-0 pt-0.5">{item.label}</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${item.color}`}>{item.value}</span>
+        </div>
+      ))}
+    </div>
+  )
+  if (type === 'assignment') return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+        <div className="w-9 h-9 rounded-full bg-emerald-200 flex items-center justify-center text-emerald-700 font-semibold text-sm">P</div>
+        <div><div className="text-sm font-semibold text-slate-800">Priya Sharma</div><div className="text-xs text-slate-500">Billing Specialist</div></div>
+        <span className="ml-auto text-[10px] px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 font-medium">In Progress</span>
+      </div>
+      <div className="flex gap-3 text-xs">
+        <div className="flex-1 p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-center"><div className="text-slate-400 mb-0.5">SLA Deadline</div><div className="font-semibold text-slate-700">4 hours</div></div>
+        <div className="flex-1 p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-center"><div className="text-slate-400 mb-0.5">Priority</div><div className="font-semibold text-red-600">High</div></div>
+      </div>
+    </div>
+  )
+  if (type === 'reply') return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-1.5 text-xs text-pink-600 font-medium"><Brain size={12} /> AI-Generated Reply</div>
+      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-700 leading-relaxed italic">
+        "Dear Customer, we sincerely apologize for the inconvenience. We have identified the failed transaction and initiated a full refund of ₹2,499. It will reflect within 3–5 business days."
+      </div>
+      <div className="flex gap-2">
+        <span className="text-xs px-3 py-1.5 rounded-lg bg-violet-600 text-white font-medium cursor-default">Send Reply</span>
+        <span className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 cursor-default">Edit</span>
+      </div>
+    </div>
+  )
+  if (type === 'resolved') return (
+    <div className="space-y-3 text-center">
+      <div className="w-14 h-14 rounded-full bg-teal-100 flex items-center justify-center mx-auto"><CheckCircle2 size={28} className="text-teal-600" /></div>
+      <div className="font-semibold text-slate-800">Complaint Resolved</div>
+      <div className="flex justify-center gap-4 text-xs">
+        <div className="text-center"><div className="text-slate-400 mb-0.5">Resolution Time</div><div className="font-bold text-slate-700">2h 14m</div></div>
+        <div className="text-center"><div className="text-slate-400 mb-0.5">SLA Status</div><div className="font-bold text-teal-600">Met</div></div>
+      </div>
+      <div className="flex justify-center gap-1 pt-1">{[...Array(5)].map((_, i) => <span key={i} className="text-yellow-400 text-base">★</span>)}</div>
+      <div className="text-xs text-slate-400">Customer rated 5/5</div>
+    </div>
+  )
+  return null
+}
+
 const features = [
   { icon: Zap, title: 'AI Classification', desc: 'Groq LLM instantly classifies complaints by sentiment, priority, and category.', color: 'text-yellow-400', bg: 'bg-yellow-400/10' },
   { icon: Shield, title: 'Duplicate Detection', desc: 'Semantic similarity catches duplicate complaints before they pile up.', color: 'text-violet-400', bg: 'bg-violet-400/10' },
@@ -396,27 +472,28 @@ const fade = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }
 
 // ── Main Landing Page ─────────────────────────────────────────────────────────
 export default function Landing() {
+  const [activeStep, setActiveStep] = useState(0)
   return (
     <div className="min-h-screen page-bg">
       <Navbar />
 
-      {/* Hero — compact, gets out of the way fast */}
-      <section className="relative flex items-center justify-center overflow-hidden grid-bg pt-24 pb-16">
+      {/* Hero — from main branch, full screen */}
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden grid-bg pt-16">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-blue-600/8 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative max-w-4xl mx-auto px-6 text-center">
+        <div className="relative max-w-5xl mx-auto px-6 text-center">
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-500/20 text-violet-300 text-xs px-4 py-2 rounded-full mb-6">
+            className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-500/20 text-violet-300 text-xs px-4 py-2 rounded-full mb-8">
             <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-pulse" />
-            Powered by Groq LLM + ML Routing Model
+            Powered by Groq LLM + HuggingFace Transformers
           </motion.div>
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}
-            className="text-5xl md:text-6xl font-bold tracking-tight leading-[1.1] mb-5">
-            From complaint to resolution<br /><span className="gradient-text">AI handles the rest</span>
+            className="text-5xl md:text-7xl font-bold tracking-tight leading-[1.1] mb-6">
+            Resolve complaints<br /><span className="gradient-text">10× smarter</span>
           </motion.h1>
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
-            className="text-base max-w-xl mx-auto mb-8 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-            SmartResolve AI classifies, routes, tracks, and resolves customer complaints — automatically, across every channel.
+            className="text-lg max-w-2xl mx-auto mb-10 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            SmartResolve AI centralizes customer complaints from every channel, classifies them instantly with AI, and routes them to the right agent — with full context.
           </motion.p>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
             className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -430,16 +507,89 @@ export default function Landing() {
               Talk to us
             </Link>
           </motion.div>
+          {/* Stats row */}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 0.5 }}
+            className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-20 max-w-3xl mx-auto">
+            {stats.map(s => (
+              <div key={s.label} className="text-center">
+                <div className="text-3xl font-bold gradient-text mb-1">{s.value}</div>
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.label}</div>
+              </div>
+            ))}
+          </motion.div>
         </div>
       </section>
 
-      {/* Live AI Demo — FIRST thing after hero */}
-      <section className="py-16 px-6" style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+      {/* Interactive Process Demo — replaces How it works */}
+      <section id="demo" className="py-20 px-6" style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+        <div className="max-w-6xl mx-auto">
+          <motion.div variants={fade} initial="hidden" whileInView="show" viewport={{ once: true }} className="text-center mb-12">
+            <div className="text-xs text-violet-400 font-semibold uppercase tracking-widest mb-3">Live Demo</div>
+            <h2 className="text-4xl font-bold mb-4" style={{ color: 'var(--text-primary)' }}>See how a complaint gets resolved</h2>
+            <p className="text-sm max-w-xl mx-auto" style={{ color: 'var(--text-secondary)' }}>
+              Click each step to see exactly what happens from submission to resolution.
+            </p>
+          </motion.div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
+            {/* Steps */}
+            <div className="space-y-3">
+              {DEMO_STEPS.map((step, i) => {
+                const Icon = step.icon
+                const isActive = activeStep === i
+                return (
+                  <motion.button key={step.id} onClick={() => setActiveStep(i)} whileHover={{ x: 4 }}
+                    className={`w-full text-left p-4 rounded-2xl border transition-all flex items-center gap-4 ${isActive ? step.border : ''}`}
+                    style={!isActive ? { background: 'var(--bg-surface)', borderColor: 'var(--border)' } : { background: 'var(--bg-surface)', borderColor: 'currentColor' }}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all ${isActive ? `${step.activeBg} text-white shadow-md` : `${step.bg} ${step.color}`}`}>
+                      <Icon size={18} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className={`text-[10px] font-bold uppercase tracking-widest ${isActive ? step.color : ''}`}
+                        style={!isActive ? { color: 'var(--text-muted)' } : {}}>Step {step.id}</span>
+                      <div className="text-sm font-semibold mt-0.5" style={{ color: 'var(--text-primary)' }}>{step.title}</div>
+                    </div>
+                    {isActive && <ChevronRight size={16} className={step.color} />}
+                  </motion.button>
+                )
+              })}
+            </div>
+            {/* Preview */}
+            <div className="sticky top-24">
+              <AnimatePresence mode="wait">
+                <motion.div key={activeStep}
+                  initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.25 }}
+                  className="rounded-2xl border p-6 min-h-[280px]"
+                  style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+                  <div className="flex items-center gap-2 mb-5 pb-4" style={{ borderBottom: '1px solid var(--border)' }}>
+                    {(() => { const Icon = DEMO_STEPS[activeStep].icon; return (
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${DEMO_STEPS[activeStep].bg}`}>
+                        <Icon size={14} className={DEMO_STEPS[activeStep].color} />
+                      </div>
+                    )})()}
+                    <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{DEMO_STEPS[activeStep].title}</span>
+                  </div>
+                  <DemoPreview type={DEMO_STEPS[activeStep].preview.type} />
+                </motion.div>
+              </AnimatePresence>
+              <div className="flex justify-center gap-2 mt-4">
+                {DEMO_STEPS.map((step, i) => (
+                  <button key={i} onClick={() => setActiveStep(i)}
+                    className={`rounded-full transition-all ${activeStep === i ? `w-6 h-2 ${step.activeBg}` : 'w-2 h-2 bg-slate-300'}`} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Try Demo — AI analysis widget */}
+      <section id="try-demo" className="py-16 px-6">
         <div className="max-w-5xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-center mb-10">
+          <motion.div variants={fade} initial="hidden" whileInView="show" viewport={{ once: true }} className="text-center mb-10">
             <div className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs px-4 py-2 rounded-full mb-4">
               <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-pulse" />
-              Live Demo — No login required
+              Try it yourself — No login required
             </div>
             <h2 className="text-3xl font-bold mb-3" style={{ color: 'var(--text-primary)' }}>
               Watch AI analyze & resolve a complaint in real time
@@ -452,23 +602,8 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Stats — after demo, now they mean something */}
-      <section className="py-14 px-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {stats.map((s, i) => (
-              <motion.div key={s.label} variants={fade} initial="hidden" whileInView="show"
-                viewport={{ once: true }} transition={{ delay: i * 0.07 }} className="text-center">
-                <div className="text-4xl font-bold gradient-text mb-1">{s.value}</div>
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.label}</div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Features */}
-      <section className="py-20 px-6" style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+      <section id="features" className="py-20 px-6" style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-6xl mx-auto">
           <motion.div variants={fade} initial="hidden" whileInView="show" viewport={{ once: true }} className="text-center mb-12">
             <div className="text-xs text-violet-400 font-semibold uppercase tracking-widest mb-3">Features</div>

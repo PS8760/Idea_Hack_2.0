@@ -33,8 +33,16 @@ def can_view(doc, user) -> bool:
     if role == "user":
         return doc.get("user_id") == uid
     if role == "agent":
-        return (doc.get("assigned_agent_id") == uid or
-                doc.get("channel") == user.get("agent_channel"))
+        # current assignment OR previously assigned via reassign
+        if doc.get("assigned_agent_id") == uid:
+            return True
+        if doc.get("channel") == user.get("agent_channel"):
+            return True
+        # check reassign history — old agent can still view
+        for entry in doc.get("reassign_history", []):
+            if entry.get("from_agent_id") == uid:
+                return True
+        return False
     return False
 
 # ── Analyze preview ─────────────────────────────────────────────────────────
@@ -387,7 +395,7 @@ async def export_csv(user=Depends(get_current_user)):
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
-# ── AI Narrator (admin only) ─────────────────────────────────────────────────
+# ── AI Narrator (role-scoped) ─────────────────────────────────────────────────
 @router.get("/ai-narrator")
 async def ai_narrator(user=Depends(get_current_user)):
     if user.get("role") not in ("admin", "agent"):
@@ -396,35 +404,60 @@ async def ai_narrator(user=Depends(get_current_user)):
     now = datetime.utcnow()
     last_24h = now - timedelta(hours=24)
     last_1h  = now - timedelta(hours=1)
+    role = user.get("role")
+    uid  = str(user["_id"])
 
-    # Fetch recent data
-    all_docs   = await db.complaints.find({}).to_list(length=500)
+    # Scope query — agent sees only their assigned complaints
+    if role == "agent":
+        query = {"$or": [
+            {"assigned_agent_id": uid},
+            {"channel": user.get("agent_channel")}
+        ]}
+    else:
+        query = {}
+
+    all_docs   = await db.complaints.find(query).to_list(length=500)
     today_docs = [d for d in all_docs if d.get("created_at") and d["created_at"] >= last_24h]
     hour_docs  = [d for d in all_docs if d.get("created_at") and d["created_at"] >= last_1h]
 
     open_count   = sum(1 for d in all_docs if d.get("status") == "open")
     inprog_count = sum(1 for d in all_docs if d.get("status") == "in-progress")
+    resolved_count = sum(1 for d in all_docs if d.get("status") == "resolved")
     breaches     = sum(1 for d in all_docs if d.get("sla_deadline") and d["sla_deadline"] < now and d.get("status") != "resolved")
     high_prio    = sum(1 for d in all_docs if d.get("priority") == "high" and d.get("status") != "resolved")
 
-    # Category breakdown today
     today_cats = dict(Counter(d.get("category") for d in today_docs))
     top_cat    = max(today_cats, key=today_cats.get) if today_cats else None
-
-    # Sentiment today
     today_sentiments = dict(Counter(d.get("sentiment") for d in today_docs))
     neg_pct = round(today_sentiments.get("negative", 0) / max(len(today_docs), 1) * 100)
-
-    # Most urgent unresolved
     urgent = [d for d in all_docs if d.get("priority") == "high" and d.get("status") != "resolved"]
     urgent_titles = [d.get("title", "") for d in urgent[:3]]
 
     if not all_docs:
-        return {"narrative": "No complaints in the system yet. The platform is ready to receive and process customer complaints.", "generated_at": now.isoformat(), "stats": {}}
+        msg = "Your queue is clear — no complaints assigned to you yet." if role == "agent" else "No complaints in the system yet."
+        return {"narrative": msg, "generated_at": now.isoformat(), "stats": {}}
 
     try:
         from ai_service import _chat
-        prompt = f"""You are an AI operations analyst for a customer complaint management platform. Write a concise, insightful real-time status briefing for the admin. Sound like a smart analyst, not a robot. Be specific with numbers. Max 3 sentences.
+        if role == "agent":
+            agent_name = user.get("name", "Agent")
+            prompt = f"""You are an AI analyst briefing a support agent named {agent_name}. Write a concise personal performance and queue briefing. Sound like a smart analyst, not a robot. Be specific with numbers. Max 3 sentences. Address the agent directly.
+
+Agent's queue data:
+- Total complaints assigned: {len(all_docs)}
+- New assigned in last 24 hours: {len(today_docs)}
+- Currently open: {open_count}
+- In progress: {inprog_count}
+- Resolved total: {resolved_count}
+- SLA breaches in their queue: {breaches}
+- High priority unresolved: {high_prio}
+- Top complaint category: {top_cat or 'N/A'}
+- Negative sentiment complaints: {neg_pct}%
+- Most urgent titles: {urgent_titles}
+
+Write the briefing now, addressing {agent_name} directly. Start directly with the insight:"""
+        else:
+            prompt = f"""You are an AI operations analyst for a customer complaint management platform. Write a concise, insightful real-time status briefing for the admin. Sound like a smart analyst, not a robot. Be specific with numbers. Max 3 sentences.
 
 Current data:
 - Total complaints in system: {len(all_docs)}
@@ -455,7 +488,6 @@ Write the briefing now. Start directly with the insight, no preamble:"""
         }
     except Exception as e:
         print(f"[NARRATOR] failed: {e}")
-        # Fallback to template narrative
         narrative = f"{len(today_docs)} complaints received in the last 24 hours. "
         if breaches > 0:
             narrative += f"{breaches} SLA breach{'es' if breaches > 1 else ''} require immediate attention. "
@@ -793,3 +825,17 @@ async def escalate_complaint(complaint_id: str, user=Depends(get_current_user)):
         )
 
     return serialize(await db.complaints.find_one({"_id": ObjectId(complaint_id)}))
+
+
+# ── Delete complaint (owner or admin only) ──────────────────────────────────
+@router.delete("/{complaint_id}")
+async def delete_complaint(complaint_id: str, user=Depends(get_current_user)):
+    db = get_db()
+    doc = await db.complaints.find_one({"_id": ObjectId(complaint_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Not found")
+    # Only the complaint owner or an admin can delete
+    if user.get("role") != "admin" and doc.get("user_id") != str(user["_id"]):
+        raise HTTPException(status_code=403, detail="Access denied")
+    await db.complaints.delete_one({"_id": ObjectId(complaint_id)})
+    return {"deleted": True}

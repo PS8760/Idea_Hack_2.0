@@ -7,7 +7,7 @@ import {
   ListChecks, CheckCircle2, Clock, Loader2, AlertTriangle,
   MessageSquare, Mail, Phone, Globe, MessageCircle,
   ChevronRight, Search, PlusCircle, Flame, ArrowUpDown,
-  User, Sparkles, Copy
+  User, Sparkles, Copy, Trash2
 } from 'lucide-react'
 
 const STATUS_META = {
@@ -58,7 +58,7 @@ function StatPill({ label, value, color, bg, icon: Icon }) {
   )
 }
 
-function ComplaintRow({ complaint, index }) {
+function ComplaintRow({ complaint, index, onDelete }) {
   const navigate = useNavigate()
   const { _id, title, summary, category, priority, status, sla_deadline, channel, assigned_agent, is_duplicate, created_at } = complaint
   const sm = STATUS_META[status] || STATUS_META.open
@@ -120,13 +120,20 @@ function ComplaintRow({ complaint, index }) {
         </div>
       </div>
 
-      {/* SLA + arrow */}
+      {/* SLA + delete + arrow */}
       <div className="flex items-center gap-2 shrink-0">
         {sla && (
           <span className={`flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl ${sla.bg} ${sla.color} font-medium`}>
             <Clock size={9} />{sla.label}
           </span>
         )}
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(_id, title) }}
+          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-400/10 text-red-400"
+          title="Delete complaint"
+        >
+          <Trash2 size={13} />
+        </button>
         <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-violet-400" />
       </div>
     </motion.div>
@@ -141,6 +148,8 @@ export default function MyComplaints() {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState('newest')
   const [showSort, setShowSort] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null) // { id, title }
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     api.get('/complaints/mine')
@@ -148,6 +157,23 @@ export default function MyComplaints() {
       .catch(() => toast.error('Failed to load your complaints'))
       .finally(() => setLoading(false))
   }, [])
+
+  const handleDelete = (id, title) => setDeleteTarget({ id, title })
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await api.delete(`/complaints/${deleteTarget.id}`)
+      setComplaints(prev => prev.filter(c => c._id !== deleteTarget.id))
+      toast.success('Complaint deleted successfully')
+      setDeleteTarget(null)
+    } catch {
+      toast.error('Failed to delete complaint')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const stats = useMemo(() => ({
     total:    complaints.length,
@@ -177,6 +203,34 @@ export default function MyComplaints() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      {/* Delete confirmation modal */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+            <motion.div initial={{ opacity: 0, scale: 0.93, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.93 }} className="w-full max-w-sm rounded-2xl p-6 shadow-2xl"
+              style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+              <div className="w-12 h-12 rounded-2xl bg-red-400/10 flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={20} className="text-red-400" />
+              </div>
+              <h2 className="text-base font-semibold text-center mb-1" style={{ color: 'var(--text-primary)' }}>
+                Delete Complaint?
+              </h2>
+              <p className="text-xs text-center mb-5" style={{ color: 'var(--text-muted)' }}>
+                "{deleteTarget.title}" will be permanently removed and cannot be recovered.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={confirmDelete} disabled={deleting}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition-colors">
+                  {deleting ? <><Loader2 size={13} className="animate-spin" />Deleting...</> : <><Trash2 size={13} />Delete</>}
+                </button>
+                <button onClick={() => setDeleteTarget(null)} className="btn-ghost px-5">Cancel</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -281,7 +335,7 @@ export default function MyComplaints() {
                   SLA Breached — {overdueList.length} overdue
                 </span>
               </div>
-              {overdueList.map((c, i) => <ComplaintRow key={c._id} complaint={c} index={i} />)}
+              {overdueList.map((c, i) => <ComplaintRow key={c._id} complaint={c} index={i} onDelete={handleDelete} />)}
               {normalList.length > 0 && (
                 <div className="flex items-center gap-2 px-5 py-2.5" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
                   <span className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-muted)' }}>
@@ -289,10 +343,10 @@ export default function MyComplaints() {
                   </span>
                 </div>
               )}
-              {normalList.map((c, i) => <ComplaintRow key={c._id} complaint={c} index={overdueList.length + i} />)}
+              {normalList.map((c, i) => <ComplaintRow key={c._id} complaint={c} index={overdueList.length + i} onDelete={handleDelete} />)}
             </>
           ) : (
-            filtered.map((c, i) => <ComplaintRow key={c._id} complaint={c} index={i} />)
+            filtered.map((c, i) => <ComplaintRow key={c._id} complaint={c} index={i} onDelete={handleDelete} />)
           )}
         </div>
       )}
